@@ -90,7 +90,7 @@ def signup_diagram():
     rebuild_edge(d, "evt_init", "ua_reg")
     cmd_edge(d, "ua_reg", "cmd_reserve")
 
-    evt_edge(d, "cmd_reserve", "evt_reserved")
+    branch_edge(d, "cmd_reserve", "evt_reserved", "Available")
     rebuild_edge(d, "evt_reserved", "ea_reserved")
     evt_edge(d, "ea_reserved", "evt_completed")
     rebuild_edge(d, "evt_completed", "ua_registered")
@@ -143,7 +143,7 @@ def change_email_diagram():
     rebuild_edge(d, "evt_change_init", "ua_changing")
     cmd_edge(d, "ua_changing", "cmd_reserve")
 
-    evt_edge(d, "cmd_reserve", "evt_reserved")
+    branch_edge(d, "cmd_reserve", "evt_reserved", "Available")
     rebuild_edge(d, "evt_reserved", "ea_reserved")
     evt_edge(d, "ea_reserved", "evt_completed")
     rebuild_edge(d, "evt_completed", "ua_registered_new")
