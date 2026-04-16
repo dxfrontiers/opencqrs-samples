@@ -73,6 +73,10 @@ The following scenarios are covered:
   Explains how to coordinate workflows across long-running, multi-system transactions are known as **Sagas**.  
   → [View sample](./implementing-sagas)
 
+- **Optimistic Locking**  
+  Demonstrates how OpenCQRS prevents lost updates on concurrent writes. Two clients modify the same book's metadata; one succeeds, the other gets `412 Precondition Failed`. No explicit version fields — the event stream's last event id is the concurrency token.  
+  → [View sample](./optimistic-locking-demo)
+
 Each sample application can be run locally via `docker-compose` (see the corresponding `docker-compose.yml` files). Interaction is possible using the included Postman and Bruno API collections.
 
 Refer to each app’s individual `README.md` for detailed instructions.
