@@ -73,8 +73,9 @@
 <!-- cmd_reserve&#45;&gt;evt_reserved -->
 <g id="edge5" class="edge">
 <title>cmd_reserve&#45;&gt;evt_reserved</title>
-<path fill="none" stroke="#996633" stroke-width="1.5" d="M278.76,-252.44C266.67,-245.45 252.68,-237.36 239.91,-229.98"/>
-<polygon fill="#996633" stroke="#996633" stroke-width="1.5" points="233.3,-226.16 242.03,-227.05 235.31,-227.03 240.35,-229.95 240.23,-230.17 240.1,-230.38 235.06,-227.47 238.43,-233.28 233.3,-226.16"/>
+<path fill="none" stroke="#336699" stroke-width="1.5" d="M278.76,-252.44C266.67,-245.45 252.68,-237.36 239.91,-229.98"/>
+<polygon fill="#336699" stroke="#336699" stroke-width="1.5" points="233.3,-226.16 242.03,-227.05 235.31,-227.03 240.35,-229.95 240.23,-230.17 240.1,-230.38 235.06,-227.47 238.43,-233.28 233.3,-226.16"/>
+<text xml:space="preserve" text-anchor="middle" x="239.5" y="-240.25" font-family="Helvetica,sans-Serif" font-size="8.00" fill="#888888">Available</text>
 </g>
 <!-- evt_denied -->
 <g id="node10" class="node">
