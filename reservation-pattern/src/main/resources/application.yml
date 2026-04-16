@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: reservation-pattern
+
+  mvc:
+    problemdetails:
+      enabled: true
+
+server:
+  port: 8080
+
+esdb:
+  server:
+    uri: http://localhost:3000
+    api-token: secret

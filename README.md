@@ -73,6 +73,10 @@ The following scenarios are covered:
   Explains how to coordinate workflows across long-running, multi-system transactions are known as **Sagas**.  
   → [View sample](./implementing-sagas)
 
+- **Reservation Pattern**  
+  Demonstrates cross-aggregate consistency for unique email addresses using a dedicated reservation aggregate and synchronous orchestration via `router.send` within the command handler. Covers idempotent command handling, sealed-state driven control flow, and crash-recovery self-healing.  
+  → [View sample](./reservation-pattern)
+
 Each sample application can be run locally via `docker-compose` (see the corresponding `docker-compose.yml` files). Interaction is possible using the included Postman and Bruno API collections.
 
 Refer to each app’s individual `README.md` for detailed instructions.
