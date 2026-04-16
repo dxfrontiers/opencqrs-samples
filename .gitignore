@@ -1,5 +1,6 @@
 # Ignore IDEA specific files
 .idea
+reservation-pattern/diagrams/generate-diagram.py
 
 # Ignore Gradle project-specific cache directory
 .gradle
