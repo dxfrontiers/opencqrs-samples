@@ -12,8 +12,6 @@ import static com.example.cqrs.domain.api.Purpose.EMAIL_CHANGE;
 @CommandHandlerConfiguration
 public class UserAccountHandling {
 
-    // ── UserAccount: Sign-Up ────────────────────────────────────────
-
     @CommandHandling
     public boolean handle(SignUpCommand command,
                           CommandEventPublisher<UserAccount> publisher,
@@ -48,8 +46,6 @@ public class UserAccountHandling {
         return new UserAccount(account.username(), new Status.NotRegistered(event.email()));
     }
 
-    // ── UserAccount: Change-Email ───────────────────────────────────
-
     @CommandHandling
     public boolean handle(UserAccount account, ChangeEmailCommand command,
                           CommandEventPublisher<UserAccount> publisher,
@@ -62,8 +58,7 @@ public class UserAccountHandling {
             case Status.Registered(String email) -> {
                 publisher.publish(new EmailChangeInitiatedEvent(account.username(), email, command.newEmail()));
 
-                boolean reserved = router.send(
-                        new ReserveEmailAddressCommand(command.newEmail(), account.username(), EMAIL_CHANGE));
+                boolean reserved = router.send(new ReserveEmailAddressCommand(command.newEmail(), account.username(), EMAIL_CHANGE));
 
                 if (reserved) {
                     publisher.publish(new EmailChangeCompletedEvent(account.username(), email));
@@ -74,15 +69,9 @@ public class UserAccountHandling {
                     yield false;
                 }
             }
-            case Status.ChangingEmail _ -> {
-                throw new IllegalStateException("Another email change is already in progress.");
-            }
-            case Status.Registering _ -> {
-                throw new IllegalStateException("Cannot change email: sign-up is still pending.");
-            }
-            case Status.NotRegistered _ -> {
-                throw new IllegalStateException("Cannot change email: account is NotRegistered.");
-            }
+            case Status.ChangingEmail _ -> throw new IllegalStateException("Another email change is already in progress.");
+            case Status.Registering _ -> throw new IllegalStateException("Cannot change email: sign-up is still pending.");
+            case Status.NotRegistered _ -> throw new IllegalStateException("Cannot change email: account is NotRegistered.");
         };
     }
 
@@ -109,24 +98,22 @@ public class UserAccountHandling {
         };
     }
 
-    // ── UserAccount: Query ──────────────────────────────────────────
-
     @CommandHandling
     public UserAccount handle(UserAccount account, GetUserAccountCommand command) {
         return account;
     }
 
-    // ── EmailAddress: Reservation ───────────────────────────────────
-
     @CommandHandling(sourcingMode = SourcingMode.LOCAL)
     public boolean handle(EmailAddress state, ReserveEmailAddressCommand command, CommandEventPublisher<EmailAddress> publisher) {
+        final EmailAddressReservedEvent reservedEvent = new EmailAddressReservedEvent(command.email(), command.username(), command.purpose());
         return switch (state) {
             case null -> {
-                publisher.publish(new EmailAddressReservedEvent(command.email(), command.username(), command.purpose()));
+                publisher.publish(reservedEvent);
+
                 yield true;
             }
             case EmailAddress.Available _ -> {
-                publisher.publish(new EmailAddressReservedEvent(command.email(), command.username(), command.purpose()));
+                publisher.publish(reservedEvent);
                 yield true;
             }
             case EmailAddress.Reserved reserved when reserved.username().equals(command.username()) ->
@@ -142,8 +129,6 @@ public class UserAccountHandling {
     public EmailAddress on(EmailAddressReservedEvent event) {
         return new EmailAddress.Reserved(event.email(), event.username());
     }
-
-    // ── EmailAddress: Release ───────────────────────────────────────
 
     @CommandHandling
     public void handle(EmailAddress state, ReleaseEmailAddressCommand command, CommandEventPublisher<EmailAddress> publisher) {

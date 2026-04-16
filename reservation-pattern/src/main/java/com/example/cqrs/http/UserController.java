@@ -37,9 +37,8 @@ public class UserController {
 
         boolean successful = commandRouter.send(new SignUpCommand(username, email));
 
-        if (successful) {
+        if (successful)
             return ResponseEntity.created(URI.create("/api/user-accounts/" + username)).build();
-        }
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_CONTENT).build();
     }
 
@@ -47,9 +46,8 @@ public class UserController {
     public ResponseEntity<Void> changeEmail(@PathVariable String username, @RequestBody ChangeEmailCommand command) {
         boolean successful = commandRouter.send(new ChangeEmailCommand(username, command.newEmail().toLowerCase()));
 
-        if (successful) {
+        if (successful)
             return ResponseEntity.noContent().build();
-        }
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_CONTENT).build();
     }
 }
