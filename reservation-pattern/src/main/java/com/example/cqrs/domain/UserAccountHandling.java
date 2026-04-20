@@ -52,9 +52,9 @@ public class UserAccountHandling {
                           @Autowired CommandRouter router) {
 
         return switch (account.status()) {
-            case Status.Registered(String email) when email.equalsIgnoreCase(command.newEmail()) -> {
+            // TODO bad request / controller status codes
+            case Status.Registered(String email) when email.equalsIgnoreCase(command.newEmail()) ->
                 throw new IllegalArgumentException("New email is the same as the current one.");
-            }
             case Status.Registered(String email) -> {
                 publisher.publish(new EmailChangeInitiatedEvent(account.username(), email, command.newEmail()));
 
