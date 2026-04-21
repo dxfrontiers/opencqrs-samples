@@ -1,8 +1,10 @@
 package com.example.cqrs.domain;
 
 import com.opencqrs.framework.command.*;
+import com.opencqrs.framework.eventhandler.EventHandling;
 import com.example.cqrs.domain.UserAccount.Status;
 import com.example.cqrs.domain.api.command.*;
+import com.example.cqrs.domain.api.exception.*;
 import com.example.cqrs.domain.api.event.*;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -13,22 +15,8 @@ import static com.example.cqrs.domain.api.Purpose.EMAIL_CHANGE;
 public class UserAccountHandling {
 
     @CommandHandling
-    public boolean handle(SignUpCommand command,
-                          CommandEventPublisher<UserAccount> publisher,
-                          @Autowired CommandRouter router) {
-
+    public void handle(SignUpCommand command, CommandEventPublisher<UserAccount> publisher) {
         publisher.publish(new SignUpInitiatedEvent(command.username(), command.email()));
-
-        boolean reserved = router.send(
-                new ReserveEmailAddressCommand(command.email(), command.username(), SIGN_UP));
-
-        if (reserved) {
-            publisher.publish(new SignUpCompletedEvent(command.username(), command.email()));
-            return true;
-        } else {
-            publisher.publish(new SignUpRejectedEvent(command.username(), command.email()));
-            return false;
-        }
     }
 
     @StateRebuilding
@@ -36,9 +24,41 @@ public class UserAccountHandling {
         return new UserAccount(event.username(), new Status.Registering(event.email()));
     }
 
+    @EventHandling("user")
+    public void on(SignUpInitiatedEvent event, @Autowired CommandRouter router) {
+        router.send(new ReserveEmailAddressCommand(event.email(), event.username(), SIGN_UP));
+    }
+
+    @CommandHandling
+    public void handle(UserAccount account, CompleteSignUpCommand command, CommandEventPublisher<UserAccount> publisher) {
+        switch (account.status()) {
+            case Status.Registering(String email) when email.equalsIgnoreCase(command.email()) ->
+                    publisher.publish(new SignUpCompletedEvent(account.username(), email));
+            case Status.Registering registering ->
+                    throw new IllegalStateException("Completion email '" + command.email()
+                            + "' does not match pending registration email '" + registering.email() + "'.");
+            case Status.Registered _, Status.ChangingEmail _ -> { }
+            case Status.NotRegistered _ ->
+                    throw new IllegalStateException("Cannot complete sign-up: account is NotRegistered.");
+        }
+    }
+
     @StateRebuilding
     public UserAccount on(UserAccount account, SignUpCompletedEvent event) {
         return new UserAccount(account.username(), new Status.Registered(event.email()));
+    }
+
+    @CommandHandling
+    public void handle(UserAccount account, RejectSignUpCommand command, CommandEventPublisher<UserAccount> publisher) {
+        switch (account.status()) {
+            case Status.Registering _ ->
+                    publisher.publish(new SignUpRejectedEvent(account.username(), command.email()));
+            case Status.NotRegistered _ -> { }
+            case Status.Registered _ ->
+                    throw new IllegalStateException("Cannot reject sign-up: account is already Registered.");
+            case Status.ChangingEmail _ ->
+                    throw new IllegalStateException("Cannot reject sign-up: account is changing email.");
+        }
     }
 
     @StateRebuilding
@@ -47,37 +67,39 @@ public class UserAccountHandling {
     }
 
     @CommandHandling
-    public boolean handle(UserAccount account, ChangeEmailCommand command,
-                          CommandEventPublisher<UserAccount> publisher,
-                          @Autowired CommandRouter router) {
-
-        return switch (account.status()) {
-            // TODO bad request / controller status codes
+    public void handle(UserAccount account, ChangeEmailCommand command, CommandEventPublisher<UserAccount> publisher) {
+        switch (account.status()) {
             case Status.Registered(String email) when email.equalsIgnoreCase(command.newEmail()) ->
-                throw new IllegalArgumentException("New email is the same as the current one.");
-            case Status.Registered(String email) -> {
-                publisher.publish(new EmailChangeInitiatedEvent(account.username(), email, command.newEmail()));
-
-                boolean reserved = router.send(new ReserveEmailAddressCommand(command.newEmail(), account.username(), EMAIL_CHANGE));
-
-                if (reserved) {
-                    publisher.publish(new EmailChangeCompletedEvent(account.username(), email));
-                    router.send(new ReleaseEmailAddressCommand(email, account.username()));
-                    yield true;
-                } else {
-                    publisher.publish(new EmailChangeRevertedEvent(account.username()));
-                    yield false;
-                }
-            }
-            case Status.ChangingEmail _ -> throw new IllegalStateException("Another email change is already in progress.");
-            case Status.Registering _ -> throw new IllegalStateException("Cannot change email: sign-up is still pending.");
-            case Status.NotRegistered _ -> throw new IllegalStateException("Cannot change email: account is NotRegistered.");
-        };
+                    throw new SameEmailException();
+            case Status.Registered(String email) ->
+                    publisher.publish(new EmailChangeInitiatedEvent(account.username(), email, command.newEmail()));
+            case Status.ChangingEmail _ -> throw new EmailChangeInProgressException();
+            case Status.Registering _ -> throw new SignUpPendingException();
+            case Status.NotRegistered _ -> throw new AccountDisabledException();
+        }
     }
 
     @StateRebuilding
     public UserAccount on(UserAccount account, EmailChangeInitiatedEvent event) {
         return new UserAccount(account.username(), new Status.ChangingEmail(event.oldEmail(), event.newEmail()));
+    }
+
+    @EventHandling("user")
+    public void on(EmailChangeInitiatedEvent event, @Autowired CommandRouter router) {
+        router.send(new ReserveEmailAddressCommand(event.newEmail(), event.username(), EMAIL_CHANGE));
+    }
+
+    @CommandHandling
+    public void handle(UserAccount account, CompleteEmailChangeCommand command, CommandEventPublisher<UserAccount> publisher) {
+        switch (account.status()) {
+            case Status.ChangingEmail changing ->
+                    publisher.publish(new EmailChangeCompletedEvent(account.username(), changing.email()));
+            case Status.Registered _ -> { }
+            case Status.Registering _ ->
+                    throw new IllegalStateException("Cannot complete email change: sign-up is still pending.");
+            case Status.NotRegistered _ ->
+                    throw new IllegalStateException("Cannot complete email change: account is NotRegistered.");
+        }
     }
 
     @StateRebuilding
@@ -87,6 +109,24 @@ public class UserAccountHandling {
                     new UserAccount(account.username(), new Status.Registered(changing.newEmail()));
             case Status.Registering _, Status.Registered _, Status.NotRegistered _ -> account;
         };
+    }
+
+    @EventHandling("user")
+    public void on(EmailChangeCompletedEvent event, @Autowired CommandRouter router) {
+        router.send(new ReleaseEmailAddressCommand(event.oldEmail(), event.username()));
+    }
+
+    @CommandHandling
+    public void handle(UserAccount account, RevertEmailChangeCommand command, CommandEventPublisher<UserAccount> publisher) {
+        switch (account.status()) {
+            case Status.ChangingEmail _ ->
+                    publisher.publish(new EmailChangeRevertedEvent(account.username()));
+            case Status.Registered _ -> { }
+            case Status.Registering _ ->
+                    throw new IllegalStateException("Cannot revert email change: sign-up is still pending.");
+            case Status.NotRegistered _ ->
+                    throw new IllegalStateException("Cannot revert email change: account is NotRegistered.");
+        }
     }
 
     @StateRebuilding
@@ -105,11 +145,11 @@ public class UserAccountHandling {
 
     @CommandHandling(sourcingMode = SourcingMode.LOCAL)
     public boolean handle(EmailAddress state, ReserveEmailAddressCommand command, CommandEventPublisher<EmailAddress> publisher) {
-        final EmailAddressReservedEvent reservedEvent = new EmailAddressReservedEvent(command.email(), command.username(), command.purpose());
+        final EmailAddressReservedEvent reservedEvent =
+                new EmailAddressReservedEvent(command.email(), command.username(), command.purpose());
         return switch (state) {
             case null -> {
                 publisher.publish(reservedEvent);
-
                 yield true;
             }
             case EmailAddress.Available _ -> {
@@ -130,12 +170,28 @@ public class UserAccountHandling {
         return new EmailAddress.Reserved(event.email(), event.username());
     }
 
+    @EventHandling("user")
+    public void on(EmailAddressReservedEvent event, @Autowired CommandRouter router) {
+        switch (event.purpose()) {
+            case SIGN_UP -> router.send(new CompleteSignUpCommand(event.username(), event.email()));
+            case EMAIL_CHANGE -> router.send(new CompleteEmailChangeCommand(event.username()));
+        }
+    }
+
+    @EventHandling("user")
+    public void on(EmailAddressDeniedEvent event, @Autowired CommandRouter router) {
+        switch (event.purpose()) {
+            case SIGN_UP -> router.send(new RejectSignUpCommand(event.username(), event.email()));
+            case EMAIL_CHANGE -> router.send(new RevertEmailChangeCommand(event.username()));
+        }
+    }
+
     @CommandHandling
     public void handle(EmailAddress state, ReleaseEmailAddressCommand command, CommandEventPublisher<EmailAddress> publisher) {
         switch (state) {
             case EmailAddress.Reserved reserved when reserved.username().equals(command.username()) ->
                     publisher.publish(new EmailAddressReleasedEvent(command.email()));
-            case EmailAddress.Available _ -> { /* replay — already released */ }
+            case EmailAddress.Available _ -> { }
             case EmailAddress.Reserved _ ->
                     throw new IllegalStateException("Cannot release: email is reserved by a different user.");
             case null ->
