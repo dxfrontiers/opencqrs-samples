@@ -34,10 +34,11 @@ public class ReleaseEmailAddressTest {
     }
 
     @Test
-    public void rejectsDifferentUser(@Autowired CommandHandlingTestFixture<ReleaseEmailAddressCommand> fixture) {
+    public void skipsForeignReservation(@Autowired CommandHandlingTestFixture<ReleaseEmailAddressCommand> fixture) {
         fixture
                 .given(new EmailAddressReservedEvent("alice@example.com", "alice", Purpose.SIGN_UP))
                 .when(new ReleaseEmailAddressCommand("alice@example.com", "bob"))
-                .expectException(IllegalStateException.class);
+                .expectSuccessfulExecution()
+                .expectNoEvents();
     }
 }

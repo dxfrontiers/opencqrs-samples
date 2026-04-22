@@ -18,7 +18,7 @@ public class ReserveEmailAddressTest {
         fixture
                 .givenNothing()
                 .when(new ReserveEmailAddressCommand("alice@example.com", "alice", Purpose.SIGN_UP))
-                .expectResult(true)
+                .expectSuccessfulExecution()
                 .expectSingleEvent(new EmailAddressReservedEvent("alice@example.com", "alice", Purpose.SIGN_UP));
     }
 
@@ -30,7 +30,7 @@ public class ReserveEmailAddressTest {
                         new EmailAddressReleasedEvent("alice@example.com")
                 )
                 .when(new ReserveEmailAddressCommand("alice@example.com", "bob", Purpose.SIGN_UP))
-                .expectResult(true)
+                .expectSuccessfulExecution()
                 .expectSingleEvent(new EmailAddressReservedEvent("alice@example.com", "bob", Purpose.SIGN_UP));
     }
 
@@ -39,7 +39,7 @@ public class ReserveEmailAddressTest {
         fixture
                 .given(new EmailAddressReservedEvent("alice@example.com", "alice", Purpose.SIGN_UP))
                 .when(new ReserveEmailAddressCommand("alice@example.com", "alice", Purpose.SIGN_UP))
-                .expectResult(true)
+                .expectSuccessfulExecution()
                 .expectNoEvents();
     }
 
@@ -48,7 +48,7 @@ public class ReserveEmailAddressTest {
         fixture
                 .given(new EmailAddressReservedEvent("alice@example.com", "alice", Purpose.SIGN_UP))
                 .when(new ReserveEmailAddressCommand("alice@example.com", "bob", Purpose.SIGN_UP))
-                .expectResult(false)
+                .expectSuccessfulExecution()
                 .expectSingleEvent(new EmailAddressDeniedEvent("alice@example.com", "bob", Purpose.SIGN_UP));
     }
 }

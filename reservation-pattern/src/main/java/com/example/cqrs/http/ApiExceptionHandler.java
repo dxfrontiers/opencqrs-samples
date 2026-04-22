@@ -1,9 +1,7 @@
 package com.example.cqrs.http;
 
 import com.example.cqrs.domain.api.command.SignUpCommand;
-import com.example.cqrs.domain.api.exception.ChangeEmailRejectedException;
-import com.example.cqrs.domain.api.exception.SignUpRejectedException;
-import com.example.cqrs.domain.api.exception.UsernameAlreadyTakenException;
+import com.example.cqrs.domain.api.exception.*;
 import com.opencqrs.framework.command.CommandSubjectAlreadyExistsException;
 import com.opencqrs.framework.command.CommandSubjectDoesNotExistException;
 import org.springframework.http.HttpStatus;
@@ -16,19 +14,27 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(ChangeEmailRejectedException.class)
     public ProblemDetail changeEmailRejected(ChangeEmailRejectedException e) {
-        return ProblemDetail.forStatusAndDetail(e.status(), e.getMessage());
+        HttpStatus status = switch (e) {
+            case SameEmailException ignored -> HttpStatus.BAD_REQUEST;
+            case SignUpPendingException ignored -> HttpStatus.CONFLICT;
+            case EmailChangeInProgressException ignored -> HttpStatus.CONFLICT;
+            case AccountDisabledException ignored -> HttpStatus.CONFLICT;
+        };
+        return ProblemDetail.forStatusAndDetail(status, e.getMessage());
     }
 
     @ExceptionHandler(SignUpRejectedException.class)
     public ProblemDetail signUpRejected(SignUpRejectedException e) {
-        return ProblemDetail.forStatusAndDetail(e.status(), e.getMessage());
+        HttpStatus status = switch (e) {
+            case UsernameAlreadyTakenException ignored -> HttpStatus.CONFLICT;
+        };
+        return ProblemDetail.forStatusAndDetail(status, e.getMessage());
     }
 
     @ExceptionHandler(CommandSubjectAlreadyExistsException.class)
     public ProblemDetail alreadyExists(CommandSubjectAlreadyExistsException e) {
         if (e.getCommand() instanceof SignUpCommand signUp) {
-            UsernameAlreadyTakenException rejected = new UsernameAlreadyTakenException(signUp.username());
-            return ProblemDetail.forStatusAndDetail(rejected.status(), rejected.getMessage());
+            return signUpRejected(new UsernameAlreadyTakenException(signUp.username()));
         }
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
     }
