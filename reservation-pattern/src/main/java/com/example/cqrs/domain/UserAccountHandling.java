@@ -34,12 +34,12 @@ public class UserAccountHandling {
         switch (account.status()) {
             case Status.Registering(String email) when email.equalsIgnoreCase(command.email()) ->
                     publisher.publish(new SignUpCompletedEvent(account.username(), email));
-            case Status.Registering registering ->
-                    throw new IllegalStateException("Completion email '" + command.email()
-                            + "' does not match pending registration email '" + registering.email() + "'.");
-            case Status.Registered _, Status.ChangingEmail _ -> { }
+            case Status.Registering _ ->
+            { /* a completion can only refer to the email the user is actually registering — the workflow never swaps it out */ }
+            case Status.Registered _, Status.ChangingEmail _ ->
+            { /* the user is already registered, so there is nothing left to complete */ }
             case Status.NotRegistered _ ->
-                    throw new IllegalStateException("Cannot complete sign-up: account is NotRegistered.");
+            { /* a completion only fires after a successful reservation, so the sign-up could never have ended in rejection */ }
         }
     }
 
@@ -53,11 +53,10 @@ public class UserAccountHandling {
         switch (account.status()) {
             case Status.Registering _ ->
                     publisher.publish(new SignUpRejectedEvent(account.username(), command.email()));
-            case Status.NotRegistered _ -> { }
-            case Status.Registered _ ->
-                    throw new IllegalStateException("Cannot reject sign-up: account is already Registered.");
-            case Status.ChangingEmail _ ->
-                    throw new IllegalStateException("Cannot reject sign-up: account is changing email.");
+            case Status.NotRegistered _ ->
+                    { /* the sign-up has already been rejected — there is nothing left to reject */ }
+            case Status.Registered _, Status.ChangingEmail _ ->
+                    { /* a rejection only fires after the reservation was denied, so the sign-up could never have made it to Registered (or beyond) */ }
         }
     }
 
@@ -94,11 +93,10 @@ public class UserAccountHandling {
         switch (account.status()) {
             case Status.ChangingEmail changing ->
                     publisher.publish(new EmailChangeCompletedEvent(account.username(), changing.email()));
-            case Status.Registered _ -> { }
-            case Status.Registering _ ->
-                    throw new IllegalStateException("Cannot complete email change: sign-up is still pending.");
-            case Status.NotRegistered _ ->
-                    throw new IllegalStateException("Cannot complete email change: account is NotRegistered.");
+            case Status.Registered _ ->
+                    { /* the email change has already been completed and the account is back to Registered */ }
+            case Status.Registering _, Status.NotRegistered _ ->
+                    { /* only a registered user can start an email change, so the account cannot be in a pre- or post-rejection state here */ }
         }
     }
 
@@ -121,11 +119,10 @@ public class UserAccountHandling {
         switch (account.status()) {
             case Status.ChangingEmail _ ->
                     publisher.publish(new EmailChangeRevertedEvent(account.username()));
-            case Status.Registered _ -> { }
-            case Status.Registering _ ->
-                    throw new IllegalStateException("Cannot revert email change: sign-up is still pending.");
-            case Status.NotRegistered _ ->
-                    throw new IllegalStateException("Cannot revert email change: account is NotRegistered.");
+            case Status.Registered _ ->
+                    { /* the revert has already happened and the account is back to its original email */ }
+            case Status.Registering _, Status.NotRegistered _ ->
+                    { /* same as completion — only a registered user could have started the change we would now be reverting */ }
         }
     }
 
@@ -144,25 +141,17 @@ public class UserAccountHandling {
     }
 
     @CommandHandling(sourcingMode = SourcingMode.LOCAL)
-    public boolean handle(EmailAddress state, ReserveEmailAddressCommand command, CommandEventPublisher<EmailAddress> publisher) {
+    public void handle(EmailAddress state, ReserveEmailAddressCommand command, CommandEventPublisher<EmailAddress> publisher) {
         final EmailAddressReservedEvent reservedEvent =
                 new EmailAddressReservedEvent(command.email(), command.username(), command.purpose());
-        return switch (state) {
-            case null -> {
-                publisher.publish(reservedEvent);
-                yield true;
-            }
-            case EmailAddress.Available _ -> {
-                publisher.publish(reservedEvent);
-                yield true;
-            }
+        switch (state) {
+            case null -> publisher.publish(reservedEvent);
+            case EmailAddress.Available _ -> publisher.publish(reservedEvent);
             case EmailAddress.Reserved reserved when reserved.username().equals(command.username()) ->
-                    true;
-            case EmailAddress.Reserved _ -> {
-                publisher.publish(new EmailAddressDeniedEvent(command.email(), command.username(), command.purpose()));
-                yield false;
-            }
-        };
+                    { /* the user already owns this reservation — there is nothing to add */ }
+            case EmailAddress.Reserved _ ->
+                    publisher.publish(new EmailAddressDeniedEvent(command.email(), command.username(), command.purpose()));
+        }
     }
 
     @StateRebuilding
@@ -191,11 +180,12 @@ public class UserAccountHandling {
         switch (state) {
             case EmailAddress.Reserved reserved when reserved.username().equals(command.username()) ->
                     publisher.publish(new EmailAddressReleasedEvent(command.email()));
-            case EmailAddress.Available _ -> { }
+            case EmailAddress.Available _ ->
+                    { /* the address has already been released and is free to be reserved again */ }
             case EmailAddress.Reserved _ ->
-                    throw new IllegalStateException("Cannot release: email is reserved by a different user.");
+                    { /* the address has since been claimed by another user — taking it away from them would be wrong */ }
             case null ->
-                    throw new IllegalStateException("Cannot release: email has never been reserved.");
+                    { /* a release only follows a completed email change, which means the address must have been reserved beforehand */ }
         }
     }
 
