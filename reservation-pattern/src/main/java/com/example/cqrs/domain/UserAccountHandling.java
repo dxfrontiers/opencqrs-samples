@@ -35,11 +35,11 @@ public class UserAccountHandling {
             case Status.Registering(String email) when email.equalsIgnoreCase(command.email()) ->
                     publisher.publish(new SignUpCompletedEvent(account.username(), email));
             case Status.Registering _ ->
-            { /* a completion can only refer to the email the user is actually registering — the workflow never swaps it out */ }
+                { /* a completion can only refer to the email the user is actually registering — the workflow never swaps it out */ }
             case Status.Registered _, Status.ChangingEmail _ ->
-            { /* the user is already registered, so there is nothing left to complete */ }
+                { /* the user is already registered, so there is nothing left to complete */ }
             case Status.NotRegistered _ ->
-            { /* a completion only fires after a successful reservation, so the sign-up could never have ended in rejection */ }
+                { /* a completion only fires after a successful reservation, so the sign-up could never have ended in rejection */ }
         }
     }
 
