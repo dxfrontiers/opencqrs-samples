@@ -53,10 +53,17 @@ Starting state is `UserAccount Registered` — the terminal state of the success
 
 ## Running the App
 
-Requires [Docker](https://www.docker.com/) and a login to the [GitHub Container Registry](https://docs.github.com/de/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authentifizieren-bei-der-container-registry).
+To run the app, ensure you have [Docker](https://www.docker.com/) installed on your system as well as being logged into the [GitHub Container Registry](https://docs.github.com/de/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authentifizieren-bei-der-container-registry).
+
+Then run:
 
 ```bash
 docker-compose up
 ```
 
-Starts EventSourcingDB and the application.
+This command will start:
+
+- An instance of EventSourcingDB.
+- An instance of the app itself.
+
+To interact with the app, we provide a [collection](clients) of requests for the [Postman](https://www.postman.com/) and [Bruno](https://www.usebruno.com/) API clients.
