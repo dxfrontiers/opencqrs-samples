@@ -35,11 +35,11 @@ public class UserAccountHandling {
             case Status.Registering(String email) when email.equalsIgnoreCase(command.email()) ->
                     publisher.publish(new SignUpCompletedEvent(account.username(), email));
             case Status.Registering _ ->
-                { /* a completion can only refer to the email the user is actually registering — the workflow never swaps it out */ }
+                { /* a completion can only refer to the email the user is actually registering */ }
             case Status.Registered _, Status.ChangingEmail _ ->
-                { /* the user is already registered, so there is nothing left to complete */ }
+                { /* the user is already registered */ }
             case Status.NotRegistered _ ->
-                { /* a completion only fires after a successful reservation, so the sign-up could never have ended in rejection */ }
+                { /* a completion only fires after a successful reservation */ }
         }
     }
 
@@ -54,9 +54,11 @@ public class UserAccountHandling {
             case Status.Registering _ ->
                     publisher.publish(new SignUpRejectedEvent(account.username(), command.email()));
             case Status.NotRegistered _ ->
-                    { /* the sign-up has already been rejected — there is nothing left to reject */ }
-            case Status.Registered _, Status.ChangingEmail _ ->
-                    { /* a rejection only fires after the reservation was denied, so the sign-up could never have made it to Registered (or beyond) */ }
+                    { /* the sign-up has already been rejected */ }
+            case Status.Registered _ ->
+                    { /* user is already registered */ }
+            case Status.ChangingEmail _ ->
+                    { /* only possible after successful sign-up */ }
         }
     }
 
@@ -94,9 +96,9 @@ public class UserAccountHandling {
             case Status.ChangingEmail changing ->
                     publisher.publish(new EmailChangeCompletedEvent(account.username(), changing.email()));
             case Status.Registered _ ->
-                    { /* the email change has already been completed and the account is back to Registered */ }
+                    { /* the email change has already been completed */ }
             case Status.Registering _, Status.NotRegistered _ ->
-                    { /* only a registered user can start an email change, so the account cannot be in a pre- or post-rejection state here */ }
+                    { /* only a registered user can start an email change */ }
         }
     }
 
@@ -120,9 +122,9 @@ public class UserAccountHandling {
             case Status.ChangingEmail _ ->
                     publisher.publish(new EmailChangeRevertedEvent(account.username()));
             case Status.Registered _ ->
-                    { /* the revert has already happened and the account is back to its original email */ }
+                    { /* the revert has already happened */ }
             case Status.Registering _, Status.NotRegistered _ ->
-                    { /* same as completion — only a registered user could have started the change we would now be reverting */ }
+                    { /* only a registered user can start an email change */ }
         }
     }
 
@@ -148,7 +150,7 @@ public class UserAccountHandling {
             case null -> publisher.publish(reservedEvent);
             case EmailAddress.Available _ -> publisher.publish(reservedEvent);
             case EmailAddress.Reserved reserved when reserved.username().equals(command.username()) ->
-                    { /* the user already owns this reservation — there is nothing to add */ }
+                    { /* the user already owns this reservation */ }
             case EmailAddress.Reserved _ ->
                     publisher.publish(new EmailAddressDeniedEvent(command.email(), command.username(), command.purpose()));
         }
@@ -181,11 +183,9 @@ public class UserAccountHandling {
             case EmailAddress.Reserved reserved when reserved.username().equals(command.username()) ->
                     publisher.publish(new EmailAddressReleasedEvent(command.email()));
             case EmailAddress.Available _ ->
-                    { /* the address has already been released and is free to be reserved again */ }
+                    { /* the address has already been released */ }
             case EmailAddress.Reserved _ ->
-                    { /* the address has since been claimed by another user — taking it away from them would be wrong */ }
-            case null ->
-                    { /* a release only follows a completed email change, which means the address must have been reserved beforehand */ }
+                    { /* the address is reserved by another user */ }
         }
     }
 

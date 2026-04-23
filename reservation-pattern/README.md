@@ -83,7 +83,11 @@ The [`ReserveEmailAddressCommand` handler](src/main/java/com/example/cqrs/domain
 
 ## Workflows
 
-All state nodes are shown in the same green — `NotRegistered` is just a regular terminal state, not a distinct error colour. Every event is produced by a command; every state transition is driven by a `@StateRebuilding` handler (dashed arrow). Solid arrows from a state to the next command reflect that state rebuilding runs **before** each command handler: the command always sees the current aggregate state.
+The diagrams use three node shapes / colours to show the CQRS building blocks:
+
+- **Blue hexagons** — commands (`@CommandHandling`)
+- **Orange rectangles** — domain events
+- **Green parallelograms** — aggregate states reconstructed via `@StateRebuilding`
 
 ### Sign-Up Workflow
 
