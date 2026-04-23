@@ -29,57 +29,7 @@ Cross-aggregate orchestration therefore uses two primitives:
 
 Here, `router.send` is invoked from **`@EventHandling("user")` methods** in [`UserAccountHandling`](src/main/java/com/example/cqrs/domain/UserAccountHandling.java). These run in the asynchronous `EventHandlingProcessor` ([reference](https://docs.opencqrs.com/reference/core_components/event_handling_processor/)) after the triggering event has been committed. The processor has per-group progress tracking and retry policies.
 
-Consequence for the HTTP layer: since the outcome (`SignUpCompletedEvent` vs `SignUpRejectedEvent`) is established several async steps after the initial command, the [`UserController`](src/main/java/com/example/cqrs/http/UserController.java) returns **`202 Accepted`** and the client polls `GET /api/user-accounts/{username}` for the terminal state.
-
-The controller methods themselves only ever build `accepted()` or `ok()` responses; all other status codes originate from exceptions that propagate out of `commandRouter.send(...)` and are translated by [`ApiExceptionHandler`](src/main/java/com/example/cqrs/http/ApiExceptionHandler.java), a Spring [`@RestControllerAdvice`](https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-controller/ann-advice.html) whose [`@ExceptionHandler`](https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-controller/ann-exceptionhandler.html) methods return `ProblemDetail` (RFC 9457). Two categories are handled:
-
-- **Domain exceptions** thrown inside `@CommandHandling` when business rules reject the command — sealed hierarchies [`ChangeEmailRejectedException`](src/main/java/com/example/cqrs/domain/api/exception/ChangeEmailRejectedException.java) and [`SignUpRejectedException`](src/main/java/com/example/cqrs/domain/api/exception/SignUpRejectedException.java) only carry the error message. The HTTP status is decided in `ApiExceptionHandler` through an exhaustive pattern-matching `switch` over the sealed type — adding a new case requires one new subclass plus one new `switch` branch, and the compiler enforces exhaustiveness.
-- **Framework exceptions** thrown by OpenCQRS when `SubjectCondition` checks fail — `CommandSubjectAlreadyExistsException` (`PRISTINE` violated, e.g. duplicate username) is mapped to `409 Conflict`, `CommandSubjectDoesNotExistException` (`EXISTS` violated) to `404 Not Found`.
-
-Propagation is plain synchronous stack unwinding on the HTTP thread:
-
-- Controller calls `commandRouter.send(command)` — blocks until events commit or an exception is thrown.
-- The exception leaves `@CommandHandling` → `CommandRouter` → controller without any `try/catch` in between.
-- Spring's `DispatcherServlet` catches it and the `ExceptionHandlerExceptionResolver` dispatches to the matching `@ExceptionHandler` in `ApiExceptionHandler`.
-- The returned `ProblemDetail` is serialized to JSON; the HTTP status is taken from `ProblemDetail.getStatus()`.
-- Exceptions thrown later in `@EventHandling` run on the `EventHandlingProcessor` thread and never reach the client — they are handled by the retry policy.
-
-## Failure signalling: denial & revert
-
-A naive implementation fails because the `EmailAddress` aggregate gives no signal back when a reservation is refused. Without such a signal the `UserAccount` stays stuck in `Registering` / `ChangingEmail`.
-
-This implementation makes denial a **first-class event**:
-
-- [`ReserveEmailAddressCommand` handler](src/main/java/com/example/cqrs/domain/UserAccountHandling.java) publishes `EmailAddressDeniedEvent` when the email is already owned by someone else.
-- A dedicated [`@EventHandling("user")`](https://docs.opencqrs.com/reference/extension_points/event_handler/) on `EmailAddressDeniedEvent` dispatches **`RejectSignUpCommand`** (purpose `SIGN_UP`) or **`RevertEmailChangeCommand`** (purpose `EMAIL_CHANGE`).
-- These commands transition the `UserAccount` to `NotRegistered` or back to `Registered(originalEmail)`.
-
-The `Purpose` enum on the reservation/denial events lets one reservation aggregate serve both flows without coupling.
-
-## Race conditions and replay
-
-Optimistic locking is enforced by EventSourcingDB on every write: a write specifies the expected head event id (or `pristine`) and fails with a `ConcurrencyException` if the subject moved on in the meantime. The `CommandRouter` retries automatically with fresh state ([CommandRouter](https://docs.opencqrs.com/reference/core_components/command_router/)).
-
-- **Two sign-ups for the same username** — both target `/user-accounts/alice` with `SubjectCondition.PRISTINE`. One wins; the other fails synchronously with `CommandSubjectAlreadyExistsException`, mapped to `409 Conflict`.
-- **Two sign-ups for the same email, different usernames** — both `SignUpCommand` handlers succeed on their own `UserAccount` subjects. The two asynchronous `ReserveEmailAddressCommand` dispatches serialize on the shared `/email-addresses/{hash}` subject. One reservation succeeds → `SignUpCompletedEvent`. The other sees `Reserved` by a different user → `EmailAddressDeniedEvent` → `RejectSignUpCommand` → `SignUpRejectedEvent`.
-- **Replay after restart** — `@StateRebuilding` handlers are pure functions over the event stream; states rebuild deterministically. Async `@EventHandling` re-processing is controlled by the per-group progress tracker, so `router.send` calls are only re-issued for events that have not yet been acknowledged.
-- **Transient failures** — [`application.yml`](src/main/resources/application.yml) configures `exponential_backoff` retries for the `user` processing group (`max-attempts: 5`). If a downstream command keeps failing, the event is eventually shelved and must be investigated.
-
-## Idempotency through preconditions
-
-Every [command handler](src/main/java/com/example/cqrs/domain/UserAccountHandling.java) branches on the current state via an **exhaustive switch** on the sealed `Status` / `EmailAddress` interfaces. Each branch chooses one of three outcomes:
-
-- **Publish** — the normal transition.
-- **Idempotent skip** — the target state has already been reached; publishing again would produce duplicate events. Required because `@EventHandling` delivery is **at-least-once** — the same command may be dispatched a second time after a retry or restart.
-- **Throw** — the state is unreachable through any normal or replayed flow; it signals a bug and must not be swallowed.
-
-Examples:
-
-- `ReserveEmailAddressCommand` on `Reserved` by the **same** user → return `true` without publishing. This is the retry/recovery case.
-- `CompleteSignUpCommand` on `Registered` → skip silently. The second delivery must not produce a second `SignUpCompletedEvent`.
-- `ChangeEmailCommand` on `Registering` → `throw SignUpPendingException`. This state cannot appear on any valid retry path.
-
-The [`ReserveEmailAddressCommand` handler](src/main/java/com/example/cqrs/domain/UserAccountHandling.java) additionally uses `@CommandHandling(sourcingMode = SourcingMode.LOCAL)` so its state is rebuilt only from events on its own subject — the `EmailAddress` aggregate has no child subjects and LOCAL sourcing avoids unnecessary recursive reads.
+Consequence for the HTTP layer: the terminal outcome is established several async steps after the initial command, so the [`UserController`](src/main/java/com/example/cqrs/http/UserController.java) returns **`202 Accepted`** and the client polls `GET /api/user-accounts/{username}` for the final state. Synchronous rejections — duplicate username, same-email, change on a disabled account, and similar — surface as exceptions from `commandRouter.send(...)` and are mapped to the appropriate HTTP status code by [`ApiExceptionHandler`](src/main/java/com/example/cqrs/http/ApiExceptionHandler.java). Failures that arise later inside `@EventHandling` stay on the processor thread and are covered by the retry policy, never the client response.
 
 ## Workflows
 
@@ -91,11 +41,13 @@ The diagrams use three node shapes / colours to show the CQRS building blocks:
 
 ### Sign-Up Workflow
 
+A sign-up spans **two aggregates**: a `SignUpCommand` creates the `UserAccount` in `Registering`, then an asynchronous `@EventHandling` asks the separate `EmailAddress` aggregate to reserve the email. A successful reservation drives the account on to `Registered`; a collision produces `EmailAddressDeniedEvent`, which in turn triggers `RejectSignUpCommand` and ends the account in `NotRegistered`. Every handler is an exhaustive `switch` over the current state — on the main-flow states it skips **idempotently**, so at-least-once redelivery and replays cannot produce duplicate events. That idempotency is what keeps the two aggregates consistent without a saga.
+
 ![Sign-Up Workflow](diagrams/signup.svg)
 
-The Change-Email workflow below picks up where Sign-Up ends: its starting state is `UserAccount Registered` — the terminal state of the successful Sign-Up branch. A `ChangeEmailCommand` on any other state is rejected synchronously.
-
 ### Change-Email Workflow
+
+Starting state is `UserAccount Registered` — the terminal state of the successful sign-up branch. `ChangeEmailCommand` reuses the **same reservation aggregate**; the `Purpose` enum on reservation / denial events tells the follow-up `@EventHandling` whether to complete a sign-up or an email change. On success, `ReleaseEmailAddressCommand` frees the old address; on denial, `RevertEmailChangeCommand` restores the original email. The same idempotent guards apply. A `ChangeEmailCommand` on any non-`Registered` state is rejected synchronously with a domain exception.
 
 ![Change-Email Workflow](diagrams/change-email.svg)
 
@@ -107,4 +59,4 @@ Requires [Docker](https://www.docker.com/) and a login to the [GitHub Container 
 docker-compose up
 ```
 
-Starts EventSourcingDB and the application. Exercise the full flow with [`test-api.sh`](test-api.sh); because state transitions are async, the script issues `GET` requests after a short delay (`ASYNC_WAIT`, default 1s) to observe the terminal state.
+Starts EventSourcingDB and the application.
