@@ -1,14 +1,12 @@
 package com.example.cqrs.domain.api.command;
 
 import com.opencqrs.framework.command.Command;
-import com.example.cqrs.domain.api.Purpose;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 
 public record ReserveEmailAddressCommand(
         String email,
-        String username,
-        Purpose purpose
+        String username
 ) implements Command {
 
     @Override

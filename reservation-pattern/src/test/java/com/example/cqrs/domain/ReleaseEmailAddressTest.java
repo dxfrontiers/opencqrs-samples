@@ -1,6 +1,5 @@
 package com.example.cqrs.domain;
 
-import com.example.cqrs.domain.api.Purpose;
 import com.example.cqrs.domain.api.command.ReleaseEmailAddressCommand;
 import com.example.cqrs.domain.api.event.EmailAddressReleasedEvent;
 import com.example.cqrs.domain.api.event.EmailAddressReservedEvent;
@@ -15,7 +14,7 @@ public class ReleaseEmailAddressTest {
     @Test
     public void releasesOwnReservation(@Autowired CommandHandlingTestFixture<ReleaseEmailAddressCommand> fixture) {
         fixture
-                .given(new EmailAddressReservedEvent("alice@example.com", "alice", Purpose.SIGN_UP))
+                .given(new EmailAddressReservedEvent("alice@example.com", "alice"))
                 .when(new ReleaseEmailAddressCommand("alice@example.com", "alice"))
                 .expectSuccessfulExecution()
                 .expectSingleEvent(new EmailAddressReleasedEvent("alice@example.com"));
@@ -25,7 +24,7 @@ public class ReleaseEmailAddressTest {
     public void skipsAlreadyReleased(@Autowired CommandHandlingTestFixture<ReleaseEmailAddressCommand> fixture) {
         fixture
                 .given(
-                        new EmailAddressReservedEvent("alice@example.com", "alice", Purpose.SIGN_UP),
+                        new EmailAddressReservedEvent("alice@example.com", "alice"),
                         new EmailAddressReleasedEvent("alice@example.com")
                 )
                 .when(new ReleaseEmailAddressCommand("alice@example.com", "alice"))
@@ -36,7 +35,7 @@ public class ReleaseEmailAddressTest {
     @Test
     public void skipsForeignReservation(@Autowired CommandHandlingTestFixture<ReleaseEmailAddressCommand> fixture) {
         fixture
-                .given(new EmailAddressReservedEvent("alice@example.com", "alice", Purpose.SIGN_UP))
+                .given(new EmailAddressReservedEvent("alice@example.com", "alice"))
                 .when(new ReleaseEmailAddressCommand("alice@example.com", "bob"))
                 .expectSuccessfulExecution()
                 .expectNoEvents();

@@ -12,20 +12,13 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
-    @ExceptionHandler(ChangeEmailRejectedException.class)
-    public ProblemDetail changeEmailRejected(ChangeEmailRejectedException e) {
+    @ExceptionHandler(UserAccountException.class)
+    public ProblemDetail userAccountException(UserAccountException e) {
         HttpStatus status = switch (e) {
             case SameEmailException ignored -> HttpStatus.BAD_REQUEST;
             case SignUpPendingException ignored -> HttpStatus.CONFLICT;
             case EmailChangeInProgressException ignored -> HttpStatus.CONFLICT;
             case AccountDisabledException ignored -> HttpStatus.CONFLICT;
-        };
-        return ProblemDetail.forStatusAndDetail(status, e.getMessage());
-    }
-
-    @ExceptionHandler(SignUpRejectedException.class)
-    public ProblemDetail signUpRejected(SignUpRejectedException e) {
-        HttpStatus status = switch (e) {
             case UsernameAlreadyTakenException ignored -> HttpStatus.CONFLICT;
         };
         return ProblemDetail.forStatusAndDetail(status, e.getMessage());
@@ -34,7 +27,7 @@ public class ApiExceptionHandler {
     @ExceptionHandler(CommandSubjectAlreadyExistsException.class)
     public ProblemDetail alreadyExists(CommandSubjectAlreadyExistsException e) {
         if (e.getCommand() instanceof SignUpCommand signUp) {
-            return signUpRejected(new UsernameAlreadyTakenException(signUp.username()));
+            return userAccountException(new UsernameAlreadyTakenException(signUp.username()));
         }
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
     }

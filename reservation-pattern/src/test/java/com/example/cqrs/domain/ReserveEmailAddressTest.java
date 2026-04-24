@@ -1,6 +1,5 @@
 package com.example.cqrs.domain;
 
-import com.example.cqrs.domain.api.Purpose;
 import com.example.cqrs.domain.api.command.ReserveEmailAddressCommand;
 import com.example.cqrs.domain.api.event.EmailAddressDeniedEvent;
 import com.example.cqrs.domain.api.event.EmailAddressReleasedEvent;
@@ -17,38 +16,42 @@ public class ReserveEmailAddressTest {
     public void reservesNewEmail(@Autowired CommandHandlingTestFixture<ReserveEmailAddressCommand> fixture) {
         fixture
                 .givenNothing()
-                .when(new ReserveEmailAddressCommand("alice@example.com", "alice", Purpose.SIGN_UP))
+                .when(new ReserveEmailAddressCommand("alice@example.com", "alice"))
                 .expectSuccessfulExecution()
-                .expectSingleEvent(new EmailAddressReservedEvent("alice@example.com", "alice", Purpose.SIGN_UP));
+                .expectResult(true)
+                .expectSingleEvent(new EmailAddressReservedEvent("alice@example.com", "alice"));
     }
 
     @Test
     public void reservesAvailableEmail(@Autowired CommandHandlingTestFixture<ReserveEmailAddressCommand> fixture) {
         fixture
                 .given(
-                        new EmailAddressReservedEvent("alice@example.com", "alice", Purpose.SIGN_UP),
+                        new EmailAddressReservedEvent("alice@example.com", "alice"),
                         new EmailAddressReleasedEvent("alice@example.com")
                 )
-                .when(new ReserveEmailAddressCommand("alice@example.com", "bob", Purpose.SIGN_UP))
+                .when(new ReserveEmailAddressCommand("alice@example.com", "bob"))
                 .expectSuccessfulExecution()
-                .expectSingleEvent(new EmailAddressReservedEvent("alice@example.com", "bob", Purpose.SIGN_UP));
+                .expectResult(true)
+                .expectSingleEvent(new EmailAddressReservedEvent("alice@example.com", "bob"));
     }
 
     @Test
     public void skipsIdempotentReservationBySameUser(@Autowired CommandHandlingTestFixture<ReserveEmailAddressCommand> fixture) {
         fixture
-                .given(new EmailAddressReservedEvent("alice@example.com", "alice", Purpose.SIGN_UP))
-                .when(new ReserveEmailAddressCommand("alice@example.com", "alice", Purpose.SIGN_UP))
+                .given(new EmailAddressReservedEvent("alice@example.com", "alice"))
+                .when(new ReserveEmailAddressCommand("alice@example.com", "alice"))
                 .expectSuccessfulExecution()
+                .expectResult(true)
                 .expectNoEvents();
     }
 
     @Test
     public void deniesDifferentUser(@Autowired CommandHandlingTestFixture<ReserveEmailAddressCommand> fixture) {
         fixture
-                .given(new EmailAddressReservedEvent("alice@example.com", "alice", Purpose.SIGN_UP))
-                .when(new ReserveEmailAddressCommand("alice@example.com", "bob", Purpose.SIGN_UP))
+                .given(new EmailAddressReservedEvent("alice@example.com", "alice"))
+                .when(new ReserveEmailAddressCommand("alice@example.com", "bob"))
                 .expectSuccessfulExecution()
-                .expectSingleEvent(new EmailAddressDeniedEvent("alice@example.com", "bob", Purpose.SIGN_UP));
+                .expectResult(false)
+                .expectSingleEvent(new EmailAddressDeniedEvent("alice@example.com", "bob"));
     }
 }

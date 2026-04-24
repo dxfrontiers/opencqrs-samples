@@ -8,9 +8,6 @@ import com.example.cqrs.domain.api.exception.*;
 import com.example.cqrs.domain.api.event.*;
 import org.springframework.beans.factory.annotation.Autowired;
 
-import static com.example.cqrs.domain.api.Purpose.SIGN_UP;
-import static com.example.cqrs.domain.api.Purpose.EMAIL_CHANGE;
-
 @CommandHandlerConfiguration
 public class UserAccountHandling {
 
@@ -26,7 +23,13 @@ public class UserAccountHandling {
 
     @EventHandling("user")
     public void on(SignUpInitiatedEvent event, @Autowired CommandRouter router) {
-        router.send(new ReserveEmailAddressCommand(event.email(), event.username(), SIGN_UP));
+        boolean reserved = router.send(new ReserveEmailAddressCommand(event.email(), event.username()));
+        switch (Boolean.valueOf(reserved)) {
+            case Boolean granted when granted ->
+                    router.send(new CompleteSignUpCommand(event.username(), event.email()));
+            case Boolean _ ->
+                    router.send(new RejectSignUpCommand(event.username(), event.email()));
+        }
     }
 
     @CommandHandling
@@ -87,7 +90,13 @@ public class UserAccountHandling {
 
     @EventHandling("user")
     public void on(EmailChangeInitiatedEvent event, @Autowired CommandRouter router) {
-        router.send(new ReserveEmailAddressCommand(event.newEmail(), event.username(), EMAIL_CHANGE));
+        boolean reserved = router.send(new ReserveEmailAddressCommand(event.newEmail(), event.username()));
+        switch (Boolean.valueOf(reserved)) {
+            case Boolean granted when granted ->
+                    router.send(new CompleteEmailChangeCommand(event.username()));
+            case Boolean _ ->
+                    router.send(new RevertEmailChangeCommand(event.username()));
+        }
     }
 
     @CommandHandling
@@ -143,38 +152,27 @@ public class UserAccountHandling {
     }
 
     @CommandHandling(sourcingMode = SourcingMode.LOCAL)
-    public void handle(EmailAddress state, ReserveEmailAddressCommand command, CommandEventPublisher<EmailAddress> publisher) {
-        final EmailAddressReservedEvent reservedEvent =
-                new EmailAddressReservedEvent(command.email(), command.username(), command.purpose());
-        switch (state) {
-            case null -> publisher.publish(reservedEvent);
-            case EmailAddress.Available _ -> publisher.publish(reservedEvent);
-            case EmailAddress.Reserved reserved when reserved.username().equals(command.username()) ->
-                    { /* the user already owns this reservation */ }
-            case EmailAddress.Reserved _ ->
-                    publisher.publish(new EmailAddressDeniedEvent(command.email(), command.username(), command.purpose()));
-        }
+    public boolean handle(EmailAddress state, ReserveEmailAddressCommand command, CommandEventPublisher<EmailAddress> publisher) {
+        return switch (state) {
+            case null -> {
+                publisher.publish(new EmailAddressReservedEvent(command.email(), command.username()));
+                yield true;
+            }
+            case EmailAddress.Available _ -> {
+                publisher.publish(new EmailAddressReservedEvent(command.email(), command.username()));
+                yield true;
+            }
+            case EmailAddress.Reserved reserved when reserved.username().equals(command.username()) -> true;
+            case EmailAddress.Reserved _ -> {
+                publisher.publish(new EmailAddressDeniedEvent(command.email(), command.username()));
+                yield false;
+            }
+        };
     }
 
     @StateRebuilding
     public EmailAddress on(EmailAddressReservedEvent event) {
         return new EmailAddress.Reserved(event.email(), event.username());
-    }
-
-    @EventHandling("user")
-    public void on(EmailAddressReservedEvent event, @Autowired CommandRouter router) {
-        switch (event.purpose()) {
-            case SIGN_UP -> router.send(new CompleteSignUpCommand(event.username(), event.email()));
-            case EMAIL_CHANGE -> router.send(new CompleteEmailChangeCommand(event.username()));
-        }
-    }
-
-    @EventHandling("user")
-    public void on(EmailAddressDeniedEvent event, @Autowired CommandRouter router) {
-        switch (event.purpose()) {
-            case SIGN_UP -> router.send(new RejectSignUpCommand(event.username(), event.email()));
-            case EMAIL_CHANGE -> router.send(new RevertEmailChangeCommand(event.username()));
-        }
     }
 
     @CommandHandling
