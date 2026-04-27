@@ -1,11 +1,12 @@
-package com.example.cqrs.http;
+package com.example.cqrs.domain;
 
-import com.opencqrs.esdb.client.Event;
 import com.example.cqrs.domain.api.event.BookDetailsCorrectedEvent;
 import com.example.cqrs.domain.api.event.BookPurchasedEvent;
+import com.opencqrs.esdb.client.Event;
 import com.opencqrs.framework.eventhandler.EventHandling;
 import org.springframework.stereotype.Service;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -18,16 +19,28 @@ public class BookCatalogProjection {
 
     @EventHandling("book-catalog")
     public void on(BookPurchasedEvent event, Event rawEvent) {
-        catalog.put(event.isbn(), new BookView(event.isbn(), event.title(), List.copyOf(event.authors()), rawEvent.id()));
+        catalog.put(event.isbn(), new BookView(rawEvent.id(), event.isbn(), event.title(), List.copyOf(event.authors())));
     }
 
     @EventHandling("book-catalog")
     public void on(BookDetailsCorrectedEvent event, Event rawEvent) {
         catalog.computeIfPresent(event.isbn(), (isbn, current) ->
-                new BookView(isbn, event.title(), List.copyOf(event.authors()), rawEvent.id()));
+                new BookView(rawEvent.id(), isbn, event.title(), List.copyOf(event.authors())));
     }
 
     public Optional<BookView> findByIsbn(String isbn) {
         return Optional.ofNullable(catalog.get(isbn));
     }
+
+    public Collection<BookView> findAll() {
+        return catalog.values();
+    }
+
+    public record BookView(String version, String isbn, String title, List<String> authors) {
+    }
+
 }
+
+
+
+

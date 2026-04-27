@@ -1,19 +1,18 @@
 package com.example.cqrs.http;
 
-import com.opencqrs.framework.command.CommandRouter;
-import com.opencqrs.framework.command.CommandSubjectDoesNotExistException;
-import com.example.cqrs.domain.Book;
-import com.example.cqrs.domain.api.command.GetBookCommand;
-import com.example.cqrs.domain.api.command.PurchaseBookCommand;
+import com.example.cqrs.domain.BookCatalogProjection;
 import com.example.cqrs.domain.api.command.CorrectBookDetailsCommand;
+import com.example.cqrs.domain.api.command.PurchaseBookCommand;
+import com.opencqrs.framework.command.CommandRouter;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 import java.util.List;
+import java.util.Optional;
 
 @RestController
-@RequestMapping("/api/books")
+@RequestMapping("/books")
 public class BookController {
 
     private final CommandRouter commandRouter;
@@ -27,31 +26,26 @@ public class BookController {
     @PostMapping
     public ResponseEntity<Void> purchase(@RequestBody PurchaseBookCommand command) {
         commandRouter.send(command);
-        return ResponseEntity.created(URI.create("/api/books/" + command.isbn())).build();
+        return ResponseEntity.created(URI.create("/books/" + command.isbn())).build();
     }
 
-    @PutMapping("/{isbn}")
-    public ResponseEntity<Void> correctDetails(@PathVariable String isbn, @RequestBody MetadataRequest body) {
-        commandRouter.send(new CorrectBookDetailsCommand(isbn, body.title(), body.authors(), body.version()));
+    @PutMapping
+    public ResponseEntity<Void> correctDetails(@RequestBody CorrectBookDetailsCommand body) {
+        commandRouter.send(body);
         return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/{isbn}")
-    public ResponseEntity<Book> getBook(@PathVariable String isbn) {
-        try {
-            Book book = commandRouter.send(new GetBookCommand(isbn));
-            return ResponseEntity.ok().eTag(book.version()).body(book);
-        } catch (CommandSubjectDoesNotExistException e) {
-            return ResponseEntity.notFound().build();
-        }
-    }
-
-    @GetMapping("/{isbn}/projected")
-    public ResponseEntity<BookView> getProjected(@PathVariable String isbn) {
+    public Optional<ResponseEntity<BookCatalogProjection.BookView>> getBook(@PathVariable String isbn) {
         return projection.findByIsbn(isbn)
-                .map(view -> ResponseEntity.ok().eTag(view.version()).body(view))
-                .orElse(ResponseEntity.notFound().build());
+                .map(book -> ResponseEntity.ok().eTag(book.version()).body(book));
     }
 
-    record MetadataRequest(String title, List<String> authors, String version) {}
+    @GetMapping
+    public ResponseEntity<List<BookCatalogProjection.BookView>> getAllBooks() {
+        return ResponseEntity.ok(projection.findAll().stream().toList());
+    }
+
+    record MetadataRequest(String title, List<String> authors, String version) {
+    }
 }

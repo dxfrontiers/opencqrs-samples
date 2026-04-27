@@ -1,11 +1,12 @@
 package com.example.cqrs.domain;
 
+import com.example.cqrs.domain.api.command.CorrectBookDetailsCommand;
+import com.example.cqrs.domain.api.command.PurchaseBookCommand;
+import com.example.cqrs.domain.api.event.BookDetailsCorrectedEvent;
+import com.example.cqrs.domain.api.event.BookPurchasedEvent;
 import com.opencqrs.esdb.client.Event;
 import com.opencqrs.framework.command.*;
-import com.example.cqrs.domain.api.command.*;
-import com.example.cqrs.domain.api.event.*;
 
-import java.util.ConcurrentModificationException;
 import java.util.List;
 
 @CommandHandlerConfiguration
@@ -18,26 +19,20 @@ public class BookHandling {
 
     @StateRebuilding
     public Book on(BookPurchasedEvent e, Event rawEvent) {
-        return new Book(rawEvent.id(), e.isbn(), e.title(), List.copyOf(e.authors()));
+        return new Book(rawEvent, e.isbn(), e.title(), List.copyOf(e.authors()), 0);
     }
 
     @CommandHandling
     public void handle(Book book, CorrectBookDetailsCommand cmd, CommandEventPublisher<Book> publisher) {
-        if (!book.version().equals(cmd.expectedVersion()))
-            throw new ConcurrentModificationException(
-                    "Expected version " + cmd.expectedVersion() + " but found " + book.version());
-
-        if (book.title().equals(cmd.title()) && book.authors().equals(cmd.authors())) return;
+        cmd.validateVersion(book.version());
+        if (book.title().equals(cmd.title()) && book.authors().equals(cmd.authors())) {
+            return;
+        }
         publisher.publish(new BookDetailsCorrectedEvent(cmd.isbn(), cmd.title(), cmd.authors()));
     }
 
     @StateRebuilding
     public Book on(Book book, BookDetailsCorrectedEvent e, Event rawEvent) {
-        return new Book(rawEvent != null ? rawEvent.id() : null, book.isbn(), e.title(), List.copyOf(e.authors()));
-    }
-
-    @CommandHandling
-    public Book handle(Book book, GetBookCommand cmd) {
-        return book;
+        return new Book(rawEvent, book.isbn(), e.title(), List.copyOf(e.authors()), 0);
     }
 }
