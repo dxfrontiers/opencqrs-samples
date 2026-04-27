@@ -153,20 +153,12 @@ public class UserAccountHandling {
 
     @CommandHandling(sourcingMode = SourcingMode.LOCAL)
     public boolean handle(EmailAddress state, ReserveEmailAddressCommand command, CommandEventPublisher<EmailAddress> publisher) {
+
         return switch (state) {
-            case null -> {
-                publisher.publish(new EmailAddressReservedEvent(command.email(), command.username()));
-                yield true;
-            }
-            case EmailAddress.Available _ -> {
-                publisher.publish(new EmailAddressReservedEvent(command.email(), command.username()));
-                yield true;
-            }
+            case null -> true;
+            case EmailAddress.Available _ -> true;
             case EmailAddress.Reserved reserved when reserved.username().equals(command.username()) -> true;
-            case EmailAddress.Reserved _ -> {
-                publisher.publish(new EmailAddressDeniedEvent(command.email(), command.username()));
-                yield false;
-            }
+            case EmailAddress.Reserved _ -> false;
         };
     }
 
