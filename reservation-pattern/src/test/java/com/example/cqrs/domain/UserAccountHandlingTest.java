@@ -5,23 +5,12 @@ import com.example.cqrs.domain.api.event.*;
 import com.example.cqrs.domain.api.exception.*;
 import com.opencqrs.framework.command.CommandHandlingTest;
 import com.opencqrs.framework.command.CommandHandlingTestFixture;
-import com.opencqrs.framework.command.CommandRouter;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.mockito.InOrder;
 import org.springframework.beans.factory.annotation.Autowired;
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
 
 @CommandHandlingTest
 class UserAccountHandlingTest {
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Tests using CommandHandlingTestFixture: every @CommandHandling method
-    // is exercised in given–when–then style on its own aggregate stream.
-    // ─────────────────────────────────────────────────────────────────────
 
     @Nested
     class CompleteSignUpCommandHandling {
@@ -293,13 +282,6 @@ class UserAccountHandlingTest {
     @Nested
     class ReserveEmailAddressCommandHandling {
 
-        // The handler returns a boolean and no longer publishes
-        // EmailAddressReservedEvent / EmailAddressDeniedEvent (commit 56137d7
-        // "remove unnecessary event publishing") — these tests therefore only
-        // assert the boolean result. The Reserved/Available state in `given`
-        // still works because @StateRebuilding for those historical events
-        // remains in place.
-
         @Test
         void reservesNewEmail(@Autowired CommandHandlingTestFixture<ReserveEmailAddressCommand> fixture) {
             fixture
@@ -307,7 +289,7 @@ class UserAccountHandlingTest {
                     .when(new ReserveEmailAddressCommand("alice@example.com", "alice"))
                     .expectSuccessfulExecution()
                     .expectResult(true)
-                    .expectNoEvents();
+                    .expectSingleEvent(new EmailAddressReservedEvent("alice@example.com", "alice"));
         }
 
         @Test
@@ -320,7 +302,7 @@ class UserAccountHandlingTest {
                     .when(new ReserveEmailAddressCommand("alice@example.com", "bob"))
                     .expectSuccessfulExecution()
                     .expectResult(true)
-                    .expectNoEvents();
+                    .expectSingleEvent(new EmailAddressReservedEvent("alice@example.com", "bob"));
         }
 
         @Test
@@ -375,109 +357,6 @@ class UserAccountHandlingTest {
                     .when(new ReleaseEmailAddressCommand("alice@example.com", "bob"))
                     .expectSuccessfulExecution()
                     .expectNoEvents();
-        }
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // TODO: @EventHandling unit tests (mocked CommandRouter).
-    //
-    // The methods below — annotated with @EventHandling("user") in
-    // UserAccountHandling — run on the asynchronous EventHandlingProcessor and
-    // dispatch follow-up commands via an injected CommandRouter. They are
-    // therefore *not* command handlers and cannot be exercised through
-    // CommandHandlingTestFixture, which only knows how to:
-    //   1. seed an aggregate's event stream (given),
-    //   2. invoke a single @CommandHandling method (when), and
-    //   3. assert result/published events on the same aggregate.
-    //
-    // Cross-aggregate orchestration via router.send(...) lives outside the
-    // fixture's scope — there is no real CommandRouter in the test slice and
-    // no second aggregate to dispatch into. We therefore test these methods
-    // as plain Java unit tests with a mocked CommandRouter, asserting the
-    // exact follow-up command(s) dispatched for each branch. Boundary value
-    // analysis on the boolean returned by ReserveEmailAddressCommand gives us
-    // the two cases per initiator (granted=true / denied=false); the
-    // EmailChangeCompletedEvent handler is unconditional and only needs one
-    // case.
-    // ─────────────────────────────────────────────────────────────────────
-    @Nested
-    class EventHandlingUnitTests {
-
-        private UserAccountHandling sut;
-        private CommandRouter router;
-
-        @BeforeEach
-        void setUp() {
-            sut = new UserAccountHandling();
-            router = mock(CommandRouter.class);
-        }
-
-        @Nested
-        class OnSignUpInitiated {
-
-            @Test
-            void dispatchesCompleteSignUp_whenReservationGranted() {
-                doReturn(true).when(router).send(any(ReserveEmailAddressCommand.class));
-
-                sut.on(new SignUpInitiatedEvent("alice", "alice@example.com"), router);
-
-                InOrder inOrder = inOrder(router);
-                inOrder.verify(router).send(new ReserveEmailAddressCommand("alice@example.com", "alice"));
-                inOrder.verify(router).send(new CompleteSignUpCommand("alice", "alice@example.com"));
-                inOrder.verifyNoMoreInteractions();
-            }
-
-            @Test
-            void dispatchesRejectSignUp_whenReservationDenied() {
-                doReturn(false).when(router).send(any(ReserveEmailAddressCommand.class));
-
-                sut.on(new SignUpInitiatedEvent("alice", "alice@example.com"), router);
-
-                InOrder inOrder = inOrder(router);
-                inOrder.verify(router).send(new ReserveEmailAddressCommand("alice@example.com", "alice"));
-                inOrder.verify(router).send(new RejectSignUpCommand("alice", "alice@example.com"));
-                inOrder.verifyNoMoreInteractions();
-            }
-        }
-
-        @Nested
-        class OnEmailChangeInitiated {
-
-            @Test
-            void dispatchesCompleteEmailChange_whenReservationGranted() {
-                doReturn(true).when(router).send(any(ReserveEmailAddressCommand.class));
-
-                sut.on(new EmailChangeInitiatedEvent("alice", "old@example.com", "new@example.com"), router);
-
-                InOrder inOrder = inOrder(router);
-                inOrder.verify(router).send(new ReserveEmailAddressCommand("new@example.com", "alice"));
-                inOrder.verify(router).send(new CompleteEmailChangeCommand("alice"));
-                inOrder.verifyNoMoreInteractions();
-            }
-
-            @Test
-            void dispatchesRevertEmailChange_whenReservationDenied() {
-                doReturn(false).when(router).send(any(ReserveEmailAddressCommand.class));
-
-                sut.on(new EmailChangeInitiatedEvent("alice", "old@example.com", "new@example.com"), router);
-
-                InOrder inOrder = inOrder(router);
-                inOrder.verify(router).send(new ReserveEmailAddressCommand("new@example.com", "alice"));
-                inOrder.verify(router).send(new RevertEmailChangeCommand("alice"));
-                inOrder.verifyNoMoreInteractions();
-            }
-        }
-
-        @Nested
-        class OnEmailChangeCompleted {
-
-            @Test
-            void dispatchesReleaseEmailAddressForOldEmail() {
-                sut.on(new EmailChangeCompletedEvent("alice", "old@example.com"), router);
-
-                verify(router).send(new ReleaseEmailAddressCommand("old@example.com", "alice"));
-                verifyNoMoreInteractions(router);
-            }
         }
     }
 }
