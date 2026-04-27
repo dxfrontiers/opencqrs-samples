@@ -24,7 +24,6 @@ public class OpenCqrsConfig {
                         entry("identity.user.email-change.reverted.v1", EmailChangeRevertedEvent.class),
 
                         entry("identity.email.reserved.v1", EmailAddressReservedEvent.class),
-                        entry("identity.email.denied.v1", EmailAddressDeniedEvent.class),
                         entry("identity.email.released.v1", EmailAddressReleasedEvent.class)
                 )
         );
