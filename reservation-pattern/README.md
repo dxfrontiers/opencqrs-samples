@@ -1,5 +1,5 @@
 # Achieving Cross-Aggregate Consistency: The Reservation Pattern
-
+// index aggregate naming?
 -----
 
 **NOTE**
