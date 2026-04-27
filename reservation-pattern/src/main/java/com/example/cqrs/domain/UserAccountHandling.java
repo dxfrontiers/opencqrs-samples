@@ -25,10 +25,8 @@ public class UserAccountHandling {
     public void on(SignUpInitiatedEvent event, @Autowired CommandRouter router) {
         boolean reserved = router.send(new ReserveEmailAddressCommand(event.email(), event.username()));
         switch (Boolean.valueOf(reserved)) {
-            case Boolean granted when granted ->
-                    router.send(new CompleteSignUpCommand(event.username(), event.email()));
-            case Boolean _ ->
-                    router.send(new RejectSignUpCommand(event.username(), event.email()));
+            case Boolean granted when granted -> router.send(new CompleteSignUpCommand(event.username(), event.email()));
+            case Boolean _ -> router.send(new RejectSignUpCommand(event.username(), event.email()));
         }
     }
 
@@ -153,10 +151,16 @@ public class UserAccountHandling {
 
     @CommandHandling(sourcingMode = SourcingMode.LOCAL)
     public boolean handle(EmailAddress state, ReserveEmailAddressCommand command, CommandEventPublisher<EmailAddress> publisher) {
-
+        final EmailAddressReservedEvent reservedEvent = new EmailAddressReservedEvent(command.email(), command.username());
         return switch (state) {
-            case null -> true;
-            case EmailAddress.Available _ -> true;
+            case null -> {
+                publisher.publish(reservedEvent);
+                yield true;
+            }
+            case EmailAddress.Available _ -> {
+                publisher.publish(reservedEvent);
+                yield true;
+            }
             case EmailAddress.Reserved reserved when reserved.username().equals(command.username()) -> true;
             case EmailAddress.Reserved _ -> false;
         };
