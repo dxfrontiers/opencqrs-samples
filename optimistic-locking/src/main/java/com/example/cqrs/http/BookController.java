@@ -37,15 +37,12 @@ public class BookController {
 
     @GetMapping("/{isbn}")
     public Optional<ResponseEntity<BookCatalogProjection.BookView>> getBook(@PathVariable String isbn) {
-        return projection.findByIsbn(isbn)
-                .map(book -> ResponseEntity.ok().eTag(book.version()).body(book));
+        return projection.findByIsbn(isbn).map(book ->
+                ResponseEntity.ok().eTag(book.version()).body(book));
     }
 
     @GetMapping
     public ResponseEntity<List<BookCatalogProjection.BookView>> getAllBooks() {
         return ResponseEntity.ok(projection.findAll().stream().toList());
-    }
-
-    record MetadataRequest(String title, List<String> authors, String version) {
     }
 }
