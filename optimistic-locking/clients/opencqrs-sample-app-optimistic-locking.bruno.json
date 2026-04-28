@@ -64,8 +64,8 @@
     },
     {
       "type": "http",
-      "name": "03. Correct with bogus version (412)",
-      "filename": "03. Correct with bogus version (412).bru",
+      "name": "03. Edit with bogus version (412)",
+      "filename": "03. Edit with bogus version (412).bru",
       "seq": 3,
       "request": {
         "url": "http://localhost:8080/books",
@@ -89,7 +89,7 @@
         "vars": {},
         "assertions": [],
         "tests": "",
-        "docs": "CommandContractsAspect compares `expectedVersion` to the latest event id on `/books/{isbn}`. Garbage in -> 412 Precondition Failed.",
+        "docs": "The handler compares `expectedVersion` against the current Book version. Garbage in -> 412 Precondition Failed.",
         "auth": {
           "mode": "none"
         }
@@ -97,8 +97,8 @@
     },
     {
       "type": "http",
-      "name": "04. Correct with current version V1 (204)",
-      "filename": "04. Correct with current version V1 (204).bru",
+      "name": "04. Edit with current version V1 (204)",
+      "filename": "04. Edit with current version V1 (204).bru",
       "seq": 4,
       "request": {
         "url": "http://localhost:8080/books",
@@ -157,8 +157,8 @@
     },
     {
       "type": "http",
-      "name": "06. Correct with stale version V1 (412)",
-      "filename": "06. Correct with stale version V1 (412).bru",
+      "name": "06. Edit with stale version V1 (412)",
+      "filename": "06. Edit with stale version V1 (412).bru",
       "seq": 6,
       "request": {
         "url": "http://localhost:8080/books",
@@ -190,8 +190,8 @@
     },
     {
       "type": "http",
-      "name": "07. Correct with current version V2 (204)",
-      "filename": "07. Correct with current version V2 (204).bru",
+      "name": "07. Edit with current version V2 (204)",
+      "filename": "07. Edit with current version V2 (204).bru",
       "seq": 7,
       "request": {
         "url": "http://localhost:8080/books",
@@ -250,8 +250,8 @@
     },
     {
       "type": "http",
-      "name": "09. Correct with current version V3 (204)",
-      "filename": "09. Correct with current version V3 (204).bru",
+      "name": "09. Edit with current version V3 (204)",
+      "filename": "09. Edit with current version V3 (204).bru",
       "seq": 9,
       "request": {
         "url": "http://localhost:8080/books",
@@ -283,8 +283,8 @@
     },
     {
       "type": "http",
-      "name": "10. Correct nonexistent book (404)",
-      "filename": "10. Correct nonexistent book (404).bru",
+      "name": "10. Edit nonexistent book (404)",
+      "filename": "10. Edit nonexistent book (404).bru",
       "seq": 10,
       "request": {
         "url": "http://localhost:8080/books",
