@@ -16,7 +16,7 @@ public class OpenCqrsConfig {
         return new PreconfiguredAssignableClassEventTypeResolver(
                 Map.ofEntries(
                         entry("catalog.book.purchased.v1", BookPurchasedEvent.class),
-                        entry("catalog.book.details-corrected.v1", BookDetailsCorrectedEvent.class)
+                        entry("catalog.book.details-edited.v1", BookDetailsEditedEvent.class)
                 )
         );
     }

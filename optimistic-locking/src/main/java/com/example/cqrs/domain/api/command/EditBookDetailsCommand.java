@@ -2,7 +2,7 @@ package com.example.cqrs.domain.api.command;
 
 import java.util.List;
 
-public record CorrectBookDetailsCommand(String isbn, String title, List<String> authors, String expectedVersion)
+public record EditBookDetailsCommand(String isbn, String title, List<String> authors, String expectedVersion)
         implements VersionedCommand, ValidatedCommand {
 
     @Override

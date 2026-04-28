@@ -1,8 +1,8 @@
 package com.example.cqrs.domain;
 
-import com.example.cqrs.domain.api.command.CorrectBookDetailsCommand;
+import com.example.cqrs.domain.api.command.EditBookDetailsCommand;
 import com.example.cqrs.domain.api.command.PurchaseBookCommand;
-import com.example.cqrs.domain.api.event.BookDetailsCorrectedEvent;
+import com.example.cqrs.domain.api.event.BookDetailsEditedEvent;
 import com.example.cqrs.domain.api.event.BookPurchasedEvent;
 import com.opencqrs.esdb.client.Event;
 import com.opencqrs.framework.command.*;
@@ -23,16 +23,16 @@ public class BookHandling {
     }
 
     @CommandHandling
-    public void handle(Book book, CorrectBookDetailsCommand cmd, CommandEventPublisher<Book> publisher) {
+    public void handle(Book book, EditBookDetailsCommand cmd, CommandEventPublisher<Book> publisher) {
         cmd.validate();
         cmd.verifyAgainst(book);
         if (book.title().equals(cmd.title()) && book.authors().equals(cmd.authors()))
             return;
-        publisher.publish(new BookDetailsCorrectedEvent(cmd.isbn(), cmd.title(), cmd.authors()));
+        publisher.publish(new BookDetailsEditedEvent(cmd.isbn(), cmd.title(), cmd.authors()));
     }
 
     @StateRebuilding
-    public Book on(Book book, BookDetailsCorrectedEvent e, Event rawEvent) {
+    public Book on(Book book, BookDetailsEditedEvent e, Event rawEvent) {
         return new Book(rawEvent, book.isbn(), e.title(), List.copyOf(e.authors()));
     }
 }

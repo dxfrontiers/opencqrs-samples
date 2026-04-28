@@ -1,7 +1,7 @@
 package com.example.cqrs.http;
 
 import com.example.cqrs.domain.BookCatalogProjection;
-import com.example.cqrs.domain.api.command.CorrectBookDetailsCommand;
+import com.example.cqrs.domain.api.command.EditBookDetailsCommand;
 import com.example.cqrs.domain.api.command.PurchaseBookCommand;
 import com.opencqrs.framework.command.CommandRouter;
 import org.springframework.http.ResponseEntity;
@@ -30,7 +30,7 @@ public class BookController {
     }
 
     @PutMapping
-    public ResponseEntity<Void> correctDetails(@RequestBody CorrectBookDetailsCommand body) {
+    public ResponseEntity<Void> editDetails(@RequestBody EditBookDetailsCommand body) {
         commandRouter.send(body);
         return ResponseEntity.noContent().build();
     }

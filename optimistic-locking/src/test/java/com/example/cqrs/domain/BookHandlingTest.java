@@ -1,8 +1,8 @@
 package com.example.cqrs.domain;
 
-import com.example.cqrs.domain.api.command.CorrectBookDetailsCommand;
+import com.example.cqrs.domain.api.command.EditBookDetailsCommand;
 import com.example.cqrs.domain.api.command.PurchaseBookCommand;
-import com.example.cqrs.domain.api.event.BookDetailsCorrectedEvent;
+import com.example.cqrs.domain.api.event.BookDetailsEditedEvent;
 import com.example.cqrs.domain.api.event.BookPurchasedEvent;
 import com.opencqrs.framework.command.CommandHandlingTest;
 import com.opencqrs.framework.command.CommandHandlingTestFixture;
@@ -30,79 +30,79 @@ public class BookHandlingTest {
     }
 
     @Test
-    public void correctBookDetailsPublishesCorrectionWhenTitleChanges(
-            @Autowired CommandHandlingTestFixture<CorrectBookDetailsCommand> fixture) {
+    public void editBookDetailsPublishesEditWhenTitleChanges(
+            @Autowired CommandHandlingTestFixture<EditBookDetailsCommand> fixture) {
         fixture
                 .given(event -> event
                         .id("event-1")
                         .payload(new BookPurchasedEvent(ISBN, TITLE, AUTHORS)))
-                .when(new CorrectBookDetailsCommand(
+                .when(new EditBookDetailsCommand(
                         ISBN,
                         "The Fellowship of the Ring",
                         AUTHORS,
                         "event-1"))
                 .expectSuccessfulExecution()
-                .expectSingleEvent(new BookDetailsCorrectedEvent(
+                .expectSingleEvent(new BookDetailsEditedEvent(
                         ISBN,
                         "The Fellowship of the Ring",
                         AUTHORS));
     }
 
     @Test
-    public void correctBookDetailsPublishesCorrectionWhenAuthorsChange(
-            @Autowired CommandHandlingTestFixture<CorrectBookDetailsCommand> fixture) {
-        var corrected = List.of("J.R.R. Tolkien", "Christopher Tolkien");
+    public void editBookDetailsPublishesEditWhenAuthorsChange(
+            @Autowired CommandHandlingTestFixture<EditBookDetailsCommand> fixture) {
+        var edited = List.of("J.R.R. Tolkien", "Christopher Tolkien");
         fixture
                 .given(event -> event
                         .id("event-1")
                         .payload(new BookPurchasedEvent(ISBN, TITLE, AUTHORS)))
-                .when(new CorrectBookDetailsCommand(ISBN, TITLE, corrected, "event-1"))
+                .when(new EditBookDetailsCommand(ISBN, TITLE, edited, "event-1"))
                 .expectSuccessfulExecution()
-                .expectSingleEvent(new BookDetailsCorrectedEvent(ISBN, TITLE, corrected));
+                .expectSingleEvent(new BookDetailsEditedEvent(ISBN, TITLE, edited));
     }
 
     @Test
-    public void correctBookDetailsIsNoOpWhenNothingChanges(
-            @Autowired CommandHandlingTestFixture<CorrectBookDetailsCommand> fixture) {
+    public void editBookDetailsIsNoOpWhenNothingChanges(
+            @Autowired CommandHandlingTestFixture<EditBookDetailsCommand> fixture) {
         fixture
                 .given(event -> event
                         .id("event-1")
                         .payload(new BookPurchasedEvent(ISBN, TITLE, AUTHORS)))
-                .when(new CorrectBookDetailsCommand(ISBN, TITLE, AUTHORS, "event-1"))
+                .when(new EditBookDetailsCommand(ISBN, TITLE, AUTHORS, "event-1"))
                 .expectSuccessfulExecution()
                 .expectNoEvents();
     }
 
     @Test
-    public void correctBookDetailsRejectsStaleVersion(
-            @Autowired CommandHandlingTestFixture<CorrectBookDetailsCommand> fixture) {
+    public void editBookDetailsRejectsStaleVersion(
+            @Autowired CommandHandlingTestFixture<EditBookDetailsCommand> fixture) {
         fixture
                 .given(event -> event
                         .id("event-2")
                         .payload(new BookPurchasedEvent(ISBN, TITLE, AUTHORS)))
-                .when(new CorrectBookDetailsCommand(ISBN, "New Title", AUTHORS, "event-1"))
+                .when(new EditBookDetailsCommand(ISBN, "New Title", AUTHORS, "event-1"))
                 .expectException(ConcurrentModificationException.class);
     }
 
     @Test
-    public void correctBookDetailsRejectsBlankTitle(
-            @Autowired CommandHandlingTestFixture<CorrectBookDetailsCommand> fixture) {
+    public void editBookDetailsRejectsBlankTitle(
+            @Autowired CommandHandlingTestFixture<EditBookDetailsCommand> fixture) {
         fixture
                 .given(event -> event
                         .id("event-1")
                         .payload(new BookPurchasedEvent(ISBN, TITLE, AUTHORS)))
-                .when(new CorrectBookDetailsCommand(ISBN, "  ", AUTHORS, "event-1"))
+                .when(new EditBookDetailsCommand(ISBN, "  ", AUTHORS, "event-1"))
                 .expectException(IllegalArgumentException.class);
     }
 
     @Test
-    public void correctBookDetailsRejectsEmptyAuthors(
-            @Autowired CommandHandlingTestFixture<CorrectBookDetailsCommand> fixture) {
+    public void editBookDetailsRejectsEmptyAuthors(
+            @Autowired CommandHandlingTestFixture<EditBookDetailsCommand> fixture) {
         fixture
                 .given(event -> event
                         .id("event-1")
                         .payload(new BookPurchasedEvent(ISBN, TITLE, AUTHORS)))
-                .when(new CorrectBookDetailsCommand(ISBN, TITLE, List.of(), "event-1"))
+                .when(new EditBookDetailsCommand(ISBN, TITLE, List.of(), "event-1"))
                 .expectException(IllegalArgumentException.class);
     }
 }

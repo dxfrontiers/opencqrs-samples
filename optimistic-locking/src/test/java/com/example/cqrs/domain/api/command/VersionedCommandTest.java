@@ -21,7 +21,7 @@ class VersionedCommandTest {
 
     @Test
     void verifyAgainstPassesWhenVersionsMatch() {
-        VersionedCommand command = new CorrectBookDetailsCommand(
+        VersionedCommand command = new EditBookDetailsCommand(
                 "isbn", "title", List.of("author"), "v1");
         when(state.version()).thenReturn("v1");
 
@@ -30,7 +30,7 @@ class VersionedCommandTest {
 
     @Test
     void verifyAgainstThrowsWhenStateIsAhead() {
-        VersionedCommand command = new CorrectBookDetailsCommand(
+        VersionedCommand command = new EditBookDetailsCommand(
                 "isbn", "title", List.of("author"), "v1");
         when(state.version()).thenReturn("v2");
 

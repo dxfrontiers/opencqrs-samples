@@ -1,6 +1,6 @@
 package com.example.cqrs.domain;
 
-import com.example.cqrs.domain.api.event.BookDetailsCorrectedEvent;
+import com.example.cqrs.domain.api.event.BookDetailsEditedEvent;
 import com.example.cqrs.domain.api.event.BookPurchasedEvent;
 import com.opencqrs.esdb.client.Event;
 import com.opencqrs.framework.eventhandler.EventHandling;
@@ -23,7 +23,7 @@ public class BookCatalogProjection {
     }
 
     @EventHandling("book-catalog")
-    public void on(BookDetailsCorrectedEvent event, Event rawEvent) {
+    public void on(BookDetailsEditedEvent event, Event rawEvent) {
         catalog.computeIfPresent(event.isbn(), (isbn, current) ->
                 new BookView(rawEvent.id(), isbn, event.title(), List.copyOf(event.authors())));
     }
