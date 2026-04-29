@@ -1,1 +1,1 @@
-rootProject.name = "optimistic-locking-demo"
+rootProject.name = "optimistic-locking"
