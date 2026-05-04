@@ -1,4 +1,4 @@
-# Optimistic Locking on a Single Aggregate Stream
+# Versioning a Subject in the Read Model
 
 -----
 
@@ -12,14 +12,18 @@ When two users edit the same record at the same time, the naive answer is "last 
 
 In an event-sourced aggregate the version is free: it is the **id of the most recent event on the aggregate's stream**. No counter, no separate column, no clock skew — and write model and read model agree by construction because they both derive the version from the same `Event rawEvent`.
 
+## What Kind of Optimistic Locking Is This?
+
+Conceptually closest to a *force-increment*-style optimistic lock: every successful write produces a new event whose id becomes the new version, so the version always advances. For an overview of the different optimistic-locking flavours, see Baeldung's [*Optimistic Locking in JPA*](https://www.baeldung.com/jpa-optimistic-locking).
+
 ## The Aggregate
 
 The [`Book`](src/main/java/com/example/cqrs/domain/Book.java) aggregate is addressed via `/books/{isbn}` and implements [`Versioned`](src/main/java/com/example/cqrs/domain/api/Versioned.java) to expose its current version to the contract layer. Two commands act on it:
 
 - [`PurchaseBookCommand`](src/main/java/com/example/cqrs/domain/api/command/PurchaseBookCommand.java) — creates the book and, with it, its first version. Uses [`SubjectCondition.PRISTINE`](https://docs.opencqrs.com/reference/extension_points/command_handler/), so a duplicate ISBN is rejected with **409 Conflict**.
-- [`EditBookDetailsCommand`](src/main/java/com/example/cqrs/domain/api/command/EditBookDetailsCommand.java) — edits title and/or authors. Implements [`VersionedCommand`](src/main/java/com/example/cqrs/domain/api/command/VersionedCommand.java) (carries `expectedVersion`) and [`ValidatedCommand`](src/main/java/com/example/cqrs/domain/api/command/ValidatedCommand.java) (rejects blank fields). Returns **204** on success, **400** on a malformed payload, **404** for an unknown ISBN, and **412** for a stale version. The two contracts are orthogonal — a command opts into either, both, or neither.
+- [`EditBookDetailsCommand`](src/main/java/com/example/cqrs/domain/api/command/EditBookDetailsCommand.java) — edits title and/or authors. Implements [`VersionedCommand`](src/main/java/com/example/cqrs/domain/api/command/VersionedCommand.java) (carries `expectedVersion`). Returns **204** on success, **400** when `expectedVersion` is missing, **404** for an unknown ISBN, and **412** for a stale version.
 
-`Versioned`, `VersionedCommand` and `ValidatedCommand` are demo-level interfaces; they are *not* part of the OpenCQRS framework and pull no extra dependencies. They sketch what an OpenCQRS-level abstraction would look like next to `com.opencqrs.framework.command.Command`.
+`Versioned` and `VersionedCommand` are demo-level interfaces; they are *not* part of the OpenCQRS framework and pull no extra dependencies. They sketch what an OpenCQRS-level abstraction would look like next to `com.opencqrs.framework.command.Command`. Making `VersionedCommand` an **opt-in** contract is deliberate: a `PurchaseBookCommand` that creates a brand-new subject has no prior version to compare against and therefore should not carry an `expectedVersion` field at all. Folding the version into every `Command` with a nullable default would invert the safer default — locking would become opt-out instead of opt-in. The default method `VersionedCommand.assertVersionMatches(state)` then lives once and is reused by every versioned command. Input-shape validation (blank titles, empty author lists) is intentionally out of scope for this sample — in a real Spring app it belongs at the HTTP boundary (Bean Validation / `@Valid`), not in the locking layer.
 
 ## How a Version Comes Into Being and How It Survives a Race
 
@@ -30,14 +34,13 @@ The first command on a brand-new subject is `PurchaseBookCommand`. The handler p
 ```java
 @CommandHandling
 public void handle(Book book, EditBookDetailsCommand cmd, CommandEventPublisher<Book> publisher) {
-    cmd.validate();
-    cmd.verifyAgainst(book);
+    cmd.assertVersionMatches(book);
     if (book.title().equals(cmd.title()) && book.authors().equals(cmd.authors())) return;
     publisher.publish(new BookDetailsEditedEvent(cmd.isbn(), cmd.title(), cmd.authors()));
 }
 ```
 
-`verifyAgainst(book)` throws `ConcurrentModificationException` on mismatch and is mapped to **412** by [`ApiExceptionHandler`](src/main/java/com/example/cqrs/http/ApiExceptionHandler.java). `validate()` throws `IllegalArgumentException` on a malformed payload and is mapped to **400**. The diff guard skips the publish when nothing actually changed.
+`assertVersionMatches(book)` throws `ConcurrentModificationException` on a version mismatch (mapped to **412** by [`ApiExceptionHandler`](src/main/java/com/example/cqrs/http/ApiExceptionHandler.java)) and `IllegalArgumentException` if `expectedVersion` is missing (mapped to **400**). The diff guard skips the publish when nothing actually changed.
 
 The diagram below stays at the level of two users acting on a book — the same flow you exercise via the Bruno collection or `test-api.sh`. Anything else that holds a version (a wiki page, a customer profile, a configuration entry) behaves identically.
 
@@ -99,16 +102,17 @@ Two takeaways:
 1. **Each successful save bumps the version.** The book itself is the single source of truth for "what version are you on now?".
 2. **A user can only save against the version they actually saw.** If somebody else saved in between, the system refuses the second save instead of silently overwriting.
 
-## Versioning Is Per-Subject, Not Per-Collection
+## Scope and Limitations
 
-The optimistic-locking contract is per **subject** — the path-like id of a single ESDB stream. In this sample the subject is `/books/{isbn}`: each book copy is one stream, and the book's version is the id of the most recent event on that stream. Individual events have their own ids, but those ids never act as the aggregate's version on their own; they are children of the parent subject, and the parent's stream tip is what writes are validated against.
+The locking contract is **per-subject** — the version is the id of the most recent event on that one ESDB stream (`/books/{isbn}`). It does not extend to the collection `/books` (there is no `max(event.id)` across independent streams; ESDB cannot supply one), and it does not extend to individual fields of a subject. If a collection-wide version is genuinely needed, it has to be materialised separately — for instance via a small relational side-table that records the latest child event id per parent subject, updated transactionally from the projection. That is intentionally not implemented here.
 
-There is **no** `max(event.id)` across a collection of subjects. ESDB's recursive read returns events from many independent streams, and combining their ids would be meaningless because the streams are not totally ordered. Optimistic locking is therefore per-stream by construction — coordinating across streams is a saga-shaped problem, not a versioning one.
+For **per-field** versioning ("two users editing different fields of the same book at the same time"), the natural event-sourcing answer is to decompose the subject — model each independently-versioned slice as its own stream (e.g. `/books/{isbn}/title`, `/books/{isbn}/authors`) — so that each slice gets its own `version()` for free. Splitting a wide command into narrower per-field commands often resolves the same need at the domain level, without any locking machinery at all.
 
-## Two Layers of Protection
+## Where the Lock Actually Lives
 
-1. **Handler-level version check.** `cmd.verifyAgainst(book)` runs first, gives a fast and informative `412` to a stale client, and never reaches the event store.
-2. **ESDB precondition.** Every write the framework appends to ESDB carries `SubjectIsOnEventId(currentTip)`. If two requests pass the handler check simultaneously and both try to commit, ESDB rejects the second one and the framework throws `ConcurrencyException` — also mapped to **412**. This is the final safety net that closes the race the handler check cannot close on its own.
+The real protection sits in the storage layer: every write the framework appends to ESDB carries `SubjectIsOnEventId(currentTip)`, and ESDB rejects the append atomically if the tip has moved. The framework surfaces that as `ConcurrencyException`, which `ApiExceptionHandler` maps to **412**. That alone is sufficient to keep the event log consistent — no race can slip past it.
+
+The handler-level `cmd.assertVersionMatches(book)` is *not* there to add a second safety net; ESDB does not need one. Its job is to give the **frontend** a fast, deterministic signal that the state it is editing is stale, before any write is even attempted. The UI can then react meaningfully — reload the record, show a diff, prompt the user to merge — instead of catching a generic concurrency error after a round trip to the store. In other words: ESDB owns the *correctness*; the handler check exists for *user experience*.
 
 ## Running the App
 
@@ -124,5 +128,13 @@ This command will start:
 
 - An instance of EventSourcingDB.
 - An instance of the app itself.
+
+If you instead want to run the app locally (e.g. via `./gradlew bootRun` or your IDE), only start EventSourcingDB:
+
+```bash
+docker-compose up esdb
+```
+
+Spring Boot's `spring-boot-docker-compose` integration also brings up EventSourcingDB automatically when you run the app locally.
 
 To interact with the app, we provide a [collection](clients) of requests for the [Bruno](https://www.usebruno.com/) API client. Run the twelve requests in order to reproduce the version progression V1 → V2 → V3 → V4 and to exercise the `412`, `404` and `409` failure modes; the three GETs capture the latest `version` into a Bruno variable so the subsequent PUTs can reuse it.
