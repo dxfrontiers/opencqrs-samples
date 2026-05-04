@@ -8,9 +8,12 @@ import java.util.ConcurrentModificationException;
 public interface VersionedCommand extends Command {
     String expectedVersion();
 
-    default void verifyAgainst(Versioned state) {
-        if (!expectedVersion().equals(state.version()))
+    default void assertVersionMatches(Versioned state) {
+        String expected = expectedVersion();
+        if (expected == null || expected.isBlank())
+            throw new IllegalArgumentException("expectedVersion must not be blank");
+        if (!expected.equals(state.version()))
             throw new ConcurrentModificationException(
-                    "Expected version " + expectedVersion() + " but found " + state.version());
+                    "Expected version " + expected + " but found " + state.version());
     }
 }

@@ -20,21 +20,21 @@ class VersionedCommandTest {
     Versioned state;
 
     @Test
-    void verifyAgainstPassesWhenVersionsMatch() {
+    void assertVersionMatchesPassesWhenVersionsMatch() {
         VersionedCommand command = new EditBookDetailsCommand(
                 "isbn", "title", List.of("author"), "v1");
         when(state.version()).thenReturn("v1");
 
-        assertThatCode(() -> command.verifyAgainst(state)).doesNotThrowAnyException();
+        assertThatCode(() -> command.assertVersionMatches(state)).doesNotThrowAnyException();
     }
 
     @Test
-    void verifyAgainstThrowsWhenStateIsAhead() {
+    void assertVersionMatchesThrowsWhenStateIsAhead() {
         VersionedCommand command = new EditBookDetailsCommand(
                 "isbn", "title", List.of("author"), "v1");
         when(state.version()).thenReturn("v2");
 
-        assertThatThrownBy(() -> command.verifyAgainst(state))
+        assertThatThrownBy(() -> command.assertVersionMatches(state))
                 .isInstanceOf(ConcurrentModificationException.class)
                 .hasMessageContaining("v1")
                 .hasMessageContaining("v2");
