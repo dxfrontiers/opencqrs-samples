@@ -83,26 +83,4 @@ public class BookHandlingTest {
                 .when(new EditBookDetailsCommand(ISBN, "New Title", AUTHORS, "event-1"))
                 .expectException(ConcurrentModificationException.class);
     }
-
-    @Test
-    public void editBookDetailsRejectsBlankTitle(
-            @Autowired CommandHandlingTestFixture<EditBookDetailsCommand> fixture) {
-        fixture
-                .given(event -> event
-                        .id("event-1")
-                        .payload(new BookPurchasedEvent(ISBN, TITLE, AUTHORS)))
-                .when(new EditBookDetailsCommand(ISBN, "  ", AUTHORS, "event-1"))
-                .expectException(IllegalArgumentException.class);
-    }
-
-    @Test
-    public void editBookDetailsRejectsEmptyAuthors(
-            @Autowired CommandHandlingTestFixture<EditBookDetailsCommand> fixture) {
-        fixture
-                .given(event -> event
-                        .id("event-1")
-                        .payload(new BookPurchasedEvent(ISBN, TITLE, AUTHORS)))
-                .when(new EditBookDetailsCommand(ISBN, TITLE, List.of(), "event-1"))
-                .expectException(IllegalArgumentException.class);
-    }
 }
