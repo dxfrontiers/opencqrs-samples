@@ -129,12 +129,4 @@ This command will start:
 - An instance of EventSourcingDB.
 - An instance of the app itself.
 
-If you instead want to run the app locally (e.g. via `./gradlew bootRun` or your IDE), only start EventSourcingDB:
-
-```bash
-docker-compose up esdb
-```
-
-Spring Boot's `spring-boot-docker-compose` integration also brings up EventSourcingDB automatically when you run the app locally.
-
 To interact with the app, we provide a [collection](clients) of requests for the [Bruno](https://www.usebruno.com/) API client. Run the twelve requests in order to reproduce the version progression V1 → V2 → V3 → V4 and to exercise the `412`, `404` and `409` failure modes; the three GETs capture the latest `version` into a Bruno variable so the subsequent PUTs can reuse it.
