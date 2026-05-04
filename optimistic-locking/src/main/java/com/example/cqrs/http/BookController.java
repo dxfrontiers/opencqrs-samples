@@ -38,7 +38,7 @@ public class BookController {
     public ResponseEntity<BookCatalogProjection.BookView> getBook(@PathVariable String isbn) {
         return projection.findByIsbn(isbn)
                 .map(book -> ResponseEntity.ok().eTag(book.version()).body(book))
-                .orElse(ResponseEntity.notFound().build());
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @GetMapping
