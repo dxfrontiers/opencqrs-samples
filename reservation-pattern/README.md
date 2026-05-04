@@ -1,5 +1,5 @@
 # Achieving Cross-Aggregate Consistency: The Reservation Pattern
-// index aggregate naming?
+
 -----
 
 **NOTE**
@@ -55,32 +55,34 @@ Starting state is `UserAccount Registered` — the terminal state of the success
 
 The following Mermaid sequence diagram makes the lifecycle of both aggregates explicit. Each participant is a swim-lane; the boolean returned by `ReserveEmailAddressCommand` drives the branch directly inside the `@EventHandling` method.
 
+Self-arrows on each aggregate lifeline depict the `@StateRebuilding` step. Frank's reasoning: the aggregate is the lifeline, and every event causes a state change immediately at `publisher.publish(...)` — not only on the next command. Showing SRB as a self-reference keeps that timing explicit and makes the lifeline the single source of truth for the aggregate's state evolution.
+
 ```mermaid
 sequenceDiagram
     autonumber
     participant Client as Client / UserController
     participant UA as UserAccount<br/>aggregate
     participant EHP as EventHandlingProcessor<br/>(group "user")
-    participant EA as EmailAddress<br/>(Index-Aggregate)
+    participant EA as EmailAddress<br/>aggregate
 
     rect rgb(240,248,255)
     Note over Client,EA: Sign-Up workflow
     Client->>+UA: SignUpCommand
-    Note over UA: ∅ → Registering(email)
+    UA->>UA: SignUpInitiatedEvent<br/>∅ → Registering(email)
     UA-->>-Client: 202 Accepted
     Note over UA,EHP: SignUpInitiatedEvent picked up async
     EHP->>+EA: ReserveEmailAddressCommand(email, user)
     alt email Available (or null)
-        Note over EA: ∅/Available → Reserved(email, user)
+        EA->>EA: EmailAddressReservedEvent<br/>∅/Available → Reserved(email, user)
         EA-->>-EHP: true
         EHP->>+UA: CompleteSignUpCommand
-        Note over UA: Registering → Registered(email)
+        UA->>UA: SignUpCompletedEvent<br/>Registering → Registered(email)
         UA-->>-EHP: ✓
     else email already Reserved by another user
-        Note over EA: stays Reserved (denial recorded)
+        Note over EA: stays Reserved (no event published)
         EA-->>EHP: false
         EHP->>+UA: RejectSignUpCommand
-        Note over UA: Registering → NotRegistered(email)
+        UA->>UA: SignUpRejectedEvent<br/>Registering → NotRegistered(email)
         UA-->>-EHP: ✓
     end
     end
@@ -88,22 +90,22 @@ sequenceDiagram
     rect rgb(245,255,240)
     Note over Client,EA: Change-Email workflow (starts from Registered)
     Client->>+UA: ChangeEmailCommand(newEmail)
-    Note over UA: Registered(old) → ChangingEmail(old, new)
+    UA->>UA: EmailChangeInitiatedEvent<br/>Registered(old) → ChangingEmail(old, new)
     UA-->>-Client: 202 Accepted
     Note over UA,EHP: EmailChangeInitiatedEvent picked up async
     EHP->>+EA: ReserveEmailAddressCommand(new, user)
     alt new email Available
-        Note over EA: ∅/Available → Reserved(new, user)
+        EA->>EA: EmailAddressReservedEvent<br/>∅/Available → Reserved(new, user)
         EA-->>-EHP: true
         EHP->>+UA: CompleteEmailChangeCommand
-        Note over UA: ChangingEmail → Registered(new)
+        UA->>UA: EmailChangeCompletedEvent<br/>ChangingEmail → Registered(new)
         UA-->>-EHP: ✓
         EHP->>EA: ReleaseEmailAddressCommand(old, user)
-        Note over EA: Reserved(old) → Available(old)
+        EA->>EA: EmailAddressReleasedEvent<br/>Reserved(old) → Available(old)
     else new email already Reserved
         EA-->>EHP: false
         EHP->>+UA: RevertEmailChangeCommand
-        Note over UA: ChangingEmail → Registered(old)
+        UA->>UA: EmailChangeRevertedEvent<br/>ChangingEmail → Registered(old)
         UA-->>-EHP: ✓
     end
     end
