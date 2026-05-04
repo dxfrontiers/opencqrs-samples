@@ -24,8 +24,7 @@ public class BookHandling {
 
     @CommandHandling
     public void handle(Book book, EditBookDetailsCommand cmd, CommandEventPublisher<Book> publisher) {
-        cmd.validate();
-        cmd.verifyAgainst(book);
+        cmd.assertVersionMatches(book);
         if (book.title().equals(cmd.title()) && book.authors().equals(cmd.authors()))
             return;
         publisher.publish(new BookDetailsEditedEvent(cmd.isbn(), cmd.title(), cmd.authors()));
