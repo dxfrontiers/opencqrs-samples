@@ -9,7 +9,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 import java.util.List;
-import java.util.Optional;
 
 @RestController
 @RequestMapping("/books")
@@ -36,9 +35,10 @@ public class BookController {
     }
 
     @GetMapping("/{isbn}")
-    public Optional<ResponseEntity<BookCatalogProjection.BookView>> getBook(@PathVariable String isbn) {
-        return projection.findByIsbn(isbn).map(book ->
-                ResponseEntity.ok().eTag(book.version()).body(book));
+    public ResponseEntity<BookCatalogProjection.BookView> getBook(@PathVariable String isbn) {
+        return projection.findByIsbn(isbn)
+                .map(book -> ResponseEntity.ok().eTag(book.version()).body(book))
+                .orElse(ResponseEntity.notFound().build());
     }
 
     @GetMapping
