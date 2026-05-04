@@ -42,59 +42,69 @@ Consequence for the HTTP layer: the terminal outcome is established several asyn
 
 ## Workflows
 
-The lifecycle of both aggregates is captured in the Mermaid sequence diagram below. Each participant is a swim-lane; the boolean returned by `ReserveEmailAddressCommand` drives the branch directly inside the `@EventHandling` method.
+The lifecycle of both aggregates is captured in the Mermaid sequence diagram below. Each participant is a swim-lane: `Client`, the two aggregates (`UserAccount`, `EmailAddress`), [`UserAccountHandling`](src/main/java/com/example/cqrs/domain/UserAccountHandling.java) (the class hosting the `@EventHandling("user")` methods that the framework's `EventHandlingProcessor` invokes), and `ESDB` on the far right as the durable event store. The boolean returned by `ReserveEmailAddressCommand` drives the branch directly inside the `@EventHandling` method.
 
-Self-arrows on each aggregate lifeline depict the `@StateRebuilding` step. The aggregate is the lifeline, and every event causes a state change immediately at `publisher.publish(...)` — not only on the next command. Showing SRB as a self-reference keeps that timing explicit and makes the lifeline the single source of truth for the aggregate's state evolution.
+Self-arrows on each aggregate lifeline depict the `@StateRebuilding` step — the aggregate is the lifeline, and every event causes a state change immediately at `publisher.publish(...)`, not only on the next command. The corresponding **`append <Event>` arrow to ESDB** makes the persistence boundary explicit, and the dashed return from ESDB to `UserAccountHandling` shows the asynchronous subscription that drives the cross-aggregate orchestration.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Client as Client / UserController
-    participant UA as UserAccount<br/>aggregate
-    participant EHP as EventHandlingProcessor<br/>(group "user")
-    participant EA as EmailAddress<br/>aggregate
+    participant Client
+    participant UA as UserAccount
+    participant EHP as UserAccountHandling
+    participant EA as EmailAddress
+    participant ESDB
 
     rect rgb(240,248,255)
-    Note over Client,EA: Sign-Up workflow
+    Note over Client,ESDB: Sign-Up workflow
     Client->>+UA: SignUpCommand
     UA->>UA: SignUpInitiatedEvent<br/>∅ → Registering(email)
+    UA->>ESDB: append SignUpInitiatedEvent
     UA-->>-Client: 202 Accepted
-    Note over UA,EHP: SignUpInitiatedEvent picked up async
+    ESDB-->>EHP: SignUpInitiatedEvent (subscribed)
     EHP->>+EA: ReserveEmailAddressCommand(email, user)
     alt email Available (or null)
         EA->>EA: EmailAddressReservedEvent<br/>∅/Available → Reserved(email, user)
+        EA->>ESDB: append EmailAddressReservedEvent
         EA-->>-EHP: true
         EHP->>+UA: CompleteSignUpCommand
         UA->>UA: SignUpCompletedEvent<br/>Registering → Registered(email)
+        UA->>ESDB: append SignUpCompletedEvent
         UA-->>-EHP: ✓
     else email already Reserved by another user
-        Note over EA: stays Reserved (no event published)
+        Note over EA,ESDB: stays Reserved — no event, nothing appended
         EA-->>EHP: false
         EHP->>+UA: RejectSignUpCommand
         UA->>UA: SignUpRejectedEvent<br/>Registering → NotRegistered(email)
+        UA->>ESDB: append SignUpRejectedEvent
         UA-->>-EHP: ✓
     end
     end
 
     rect rgb(245,255,240)
-    Note over Client,EA: Change-Email workflow (starts from Registered)
+    Note over Client,ESDB: Change-Email workflow (starts from Registered)
     Client->>+UA: ChangeEmailCommand(newEmail)
     UA->>UA: EmailChangeInitiatedEvent<br/>Registered(old) → ChangingEmail(old, new)
+    UA->>ESDB: append EmailChangeInitiatedEvent
     UA-->>-Client: 202 Accepted
-    Note over UA,EHP: EmailChangeInitiatedEvent picked up async
+    ESDB-->>EHP: EmailChangeInitiatedEvent (subscribed)
     EHP->>+EA: ReserveEmailAddressCommand(new, user)
     alt new email Available
         EA->>EA: EmailAddressReservedEvent<br/>∅/Available → Reserved(new, user)
+        EA->>ESDB: append EmailAddressReservedEvent
         EA-->>-EHP: true
         EHP->>+UA: CompleteEmailChangeCommand
         UA->>UA: EmailChangeCompletedEvent<br/>ChangingEmail → Registered(new)
+        UA->>ESDB: append EmailChangeCompletedEvent
         UA-->>-EHP: ✓
         EHP->>EA: ReleaseEmailAddressCommand(old, user)
         EA->>EA: EmailAddressReleasedEvent<br/>Reserved(old) → Available(old)
+        EA->>ESDB: append EmailAddressReleasedEvent
     else new email already Reserved
         EA-->>EHP: false
         EHP->>+UA: RevertEmailChangeCommand
         UA->>UA: EmailChangeRevertedEvent<br/>ChangingEmail → Registered(old)
+        UA->>ESDB: append EmailChangeRevertedEvent
         UA-->>-EHP: ✓
     end
     end
