@@ -9,6 +9,8 @@ services:
 
   spring-app:
     image: "ghcr.io/dxfrontiers/opencqrs-samples-optimistic-locking:latest"
+    profiles:
+      - app
     depends_on:
       - esdb
     environment:
