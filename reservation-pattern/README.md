@@ -33,29 +33,9 @@ Consequence for the HTTP layer: the terminal outcome is established several asyn
 
 ## Workflows
 
-The diagrams use three node shapes / colours to show the CQRS building blocks:
+The lifecycle of both aggregates is captured in the Mermaid sequence diagram below. Each participant is a swim-lane; the boolean returned by `ReserveEmailAddressCommand` drives the branch directly inside the `@EventHandling` method.
 
-- **Blue hexagons** — commands (`@CommandHandling`)
-- **Orange rectangles** — domain events
-- **Green parallelograms** — aggregate states reconstructed via `@StateRebuilding`
-
-### Sign-Up Workflow
-
-A sign-up spans **two aggregates**: a `SignUpCommand` creates the `UserAccount` in `Registering`, then an asynchronous `@EventHandling` asks the separate `EmailAddress` aggregate to reserve the email. The handler returns `true` on success (and persists `EmailAddressReservedEvent`) or `false` on collision (and persists `EmailAddressDeniedEvent` for audit); the caller then dispatches `CompleteSignUpCommand` or `RejectSignUpCommand` accordingly. Every handler is an exhaustive `switch` over the current state — on the main-flow states it skips **idempotently**, so at-least-once redelivery and replays cannot produce duplicate events. That idempotency is what keeps the two aggregates consistent without a saga.
-
-![Sign-Up Workflow](diagrams/signup.svg)
-
-### Change-Email Workflow
-
-Starting state is `UserAccount Registered` — the terminal state of the successful sign-up branch. `ChangeEmailCommand` reuses the **same Index-Aggregate**; the boolean returned by `ReserveEmailAddressCommand` tells the follow-up `@EventHandling` whether to dispatch `CompleteEmailChangeCommand` or `RevertEmailChangeCommand`. On success, `ReleaseEmailAddressCommand` frees the old address; on denial, the original email stays in place. The same idempotent guards apply. A `ChangeEmailCommand` on any non-`Registered` state is rejected synchronously with a domain exception.
-
-![Change-Email Workflow](diagrams/change-email.svg)
-
-### Aggregate Lifecycle (Sequence Diagram with Swim-Lanes)
-
-The following Mermaid sequence diagram makes the lifecycle of both aggregates explicit. Each participant is a swim-lane; the boolean returned by `ReserveEmailAddressCommand` drives the branch directly inside the `@EventHandling` method.
-
-Self-arrows on each aggregate lifeline depict the `@StateRebuilding` step. Frank's reasoning: the aggregate is the lifeline, and every event causes a state change immediately at `publisher.publish(...)` — not only on the next command. Showing SRB as a self-reference keeps that timing explicit and makes the lifeline the single source of truth for the aggregate's state evolution.
+Self-arrows on each aggregate lifeline depict the `@StateRebuilding` step. The aggregate is the lifeline, and every event causes a state change immediately at `publisher.publish(...)` — not only on the next command. Showing SRB as a self-reference keeps that timing explicit and makes the lifeline the single source of truth for the aggregate's state evolution.
 
 ```mermaid
 sequenceDiagram
@@ -110,6 +90,14 @@ sequenceDiagram
     end
     end
 ```
+
+### Sign-Up Workflow
+
+A sign-up spans **two aggregates**: a `SignUpCommand` creates the `UserAccount` in `Registering`, then an asynchronous `@EventHandling` asks the separate `EmailAddress` aggregate to reserve the email. The handler returns `true` on success (and persists `EmailAddressReservedEvent`) or `false` on collision (without publishing any event); the caller then dispatches `CompleteSignUpCommand` or `RejectSignUpCommand` accordingly. Every handler is an exhaustive `switch` over the current state — on the main-flow states it skips **idempotently**, so at-least-once redelivery and replays cannot produce duplicate events. That idempotency is what keeps the two aggregates consistent without a saga.
+
+### Change-Email Workflow
+
+Starting state is `UserAccount Registered` — the terminal state of the successful sign-up branch. `ChangeEmailCommand` reuses the same `EmailAddress` aggregate; the boolean returned by `ReserveEmailAddressCommand` tells the follow-up `@EventHandling` whether to dispatch `CompleteEmailChangeCommand` or `RevertEmailChangeCommand`. On success, `ReleaseEmailAddressCommand` frees the old address; on denial, the original email stays in place. The same idempotent guards apply. A `ChangeEmailCommand` on any non-`Registered` state is rejected synchronously with a domain exception.
 
 ## Running the App
 
