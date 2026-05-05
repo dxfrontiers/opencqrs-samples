@@ -74,12 +74,12 @@ The following scenarios are covered:
   → [View sample](./implementing-sagas)
 
 - **Reservation Pattern**  
-  Achieves cross-aggregate consistency (globally unique email addresses) with a dedicated **index aggregate** as a reservation lock and **asynchronous `@EventHandling`-driven orchestration** — no Saga. Exhaustive idempotent state-machine switches keep at-least-once redelivery and event replay safe by construction.  
-  → [View sample](./reservation-pattern) *(currently on the [`feature-reservation-pattern`](https://github.com/dxfrontiers/opencqrs-samples/tree/feature-reservation-pattern/reservation-pattern) branch)*
+  Demonstrates cross-aggregate uniqueness via a dedicated index aggregate and asynchronous `@EventHandling`-driven orchestration.  
+  → [View sample](./reservation-pattern)
 
 - **Optimistic Locking**  
-  Demonstrates optimistic concurrency control by deriving the aggregate version from the **id of its latest event** — no separate counter, no clock, write- and read-model agree by construction. Commands opt in via a `VersionedCommand` carrying `expectedVersion`; stale writes are rejected with **412 Precondition Failed**.  
-  → [View sample](https://github.com/dxfrontiers/opencqrs-samples/tree/feature-optimistic-locking/optimistic-locking) *(on the [`feature-optimistic-locking`](https://github.com/dxfrontiers/opencqrs-samples/tree/feature-optimistic-locking) branch)*
+  Demonstrates optimistic concurrency control by deriving the aggregate version from the **id of its latest event**.  
+  → [View sample](https://github.com/dxfrontiers/opencqrs-samples/tree/feature-optimistic-locking/optimistic-locking)
 
 Each sample application can be run locally via `docker-compose` (see the corresponding `docker-compose.yml` files). Interaction is possible using the included Postman and Bruno API collections.
 
