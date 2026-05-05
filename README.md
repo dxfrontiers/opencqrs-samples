@@ -73,9 +73,13 @@ The following scenarios are covered:
   Explains how to coordinate workflows across long-running, multi-system transactions are known as **Sagas**.  
   → [View sample](./implementing-sagas)
 
+- **Reservation Pattern**  
+  Achieves cross-aggregate consistency (unique email addresses) with a dedicated **index aggregate** as a reservation lock and **asynchronous `@EventHandling`-driven orchestration** — no Saga.  
+  → [View sample](https://github.com/dxfrontiers/opencqrs-samples/tree/feature-reservation-pattern/reservation-pattern)
+
 - **Optimistic Locking**  
-  Demonstrates how OpenCQRS prevents lost updates on concurrent writes. Two clients modify the same book's metadata; one succeeds, the other gets `412 Precondition Failed`. No explicit version fields — the event stream's last event id is the concurrency token.  
-  → [View sample](./optimistic-locking-demo)
+  Demonstrates optimistic concurrency control by deriving the aggregate version from the **id of its latest event**.  
+  → [View sample](./optimistic-locking)
 
 Each sample application can be run locally via `docker-compose` (see the corresponding `docker-compose.yml` files). Interaction is possible using the included Postman and Bruno API collections.
 
