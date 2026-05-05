@@ -54,48 +54,22 @@ sequenceDiagram
     participant B as Book
     participant S as Event Stream
 
-    Note over B,S: Stream is empty, no book yet
+    Note over B: book at Version 0
 
-    rect rgb(245,250,240)
-    Note over U1,S: 1. The first write creates the book and its version
-    U1->>B: purchase
-    B->>S: append "purchased" event
-    S-->>B: id assigned
-    Note over B: book exists at Version 0
-    B-->>U1: 201 Created
-    end
-
-    rect rgb(255,250,240)
-    Note over U1,U2: 2. Both users open the book at the same version
     U1->>B: open
     B-->>U1: snapshot at Version 0
     U2->>B: open
     B-->>U2: snapshot at Version 0
-    end
 
-    rect rgb(245,255,240)
-    Note over U1,S: 3. The first save wins — the version advances
-    U1->>B: save edit (based on Version 0)
+    U1->>B: save (based on Version 0)
     B->>S: append "edited" event
-    S-->>B: id assigned
-    Note over B: book is now Version 1
+    Note over B: now Version 1
     B-->>U1: 204 No Content
-    end
 
     rect rgb(255,240,240)
-    Note over U2,B: 4. The second save is rejected as stale
-    U2->>B: save edit (based on Version 0)
+    U2->>B: save (based on Version 0)
     Note right of B: latest is already Version 1
     B--xU2: 412 Precondition Failed
-    end
-
-    rect rgb(240,248,255)
-    Note over U2,B: 5. Reload, then retry against the new version
-    U2->>B: open
-    B-->>U2: snapshot at Version 1
-    U2->>B: save edit (based on Version 1)
-    Note over B: book is now Version 2
-    B-->>U2: 204 No Content
     end
 ```
 
