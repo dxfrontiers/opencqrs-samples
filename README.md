@@ -74,7 +74,7 @@ The following scenarios are covered:
   → [View sample](./implementing-sagas)
 
 - **Reservation Pattern**  
-  Achieves cross-aggregate consistency (unique email addresses) with a dedicated **index aggregate** as a reservation lock and **asynchronous `@EventHandling`-driven orchestration** — no Saga.  
+  Demonstrates cross-aggregate uniqueness via a dedicated index aggregate and asynchronous `@EventHandling`-driven orchestration.  
   → [View sample](https://github.com/dxfrontiers/opencqrs-samples/tree/feature-reservation-pattern/reservation-pattern)
 
 - **Optimistic Locking**  
