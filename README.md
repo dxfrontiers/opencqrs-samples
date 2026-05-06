@@ -73,6 +73,14 @@ The following scenarios are covered:
   Explains how to coordinate workflows across long-running, multi-system transactions are known as **Sagas**.  
   → [View sample](./implementing-sagas)
 
+- **Reservation Pattern**  
+  Demonstrates cross-aggregate uniqueness via a dedicated index aggregate and asynchronous `@EventHandling`-driven orchestration.  
+  → [View sample](https://github.com/dxfrontiers/opencqrs-samples/tree/feature-reservation-pattern/reservation-pattern)
+
+- **Optimistic Locking**  
+  Demonstrates optimistic concurrency control by deriving the aggregate version from the **id of its latest event**.  
+  → [View sample](./optimistic-locking)
+
 Each sample application can be run locally via `docker-compose` (see the corresponding `docker-compose.yml` files). Interaction is possible using the included Postman and Bruno API collections.
 
 Refer to each app’s individual `README.md` for detailed instructions.
