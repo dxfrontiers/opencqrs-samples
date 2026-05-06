@@ -42,70 +42,60 @@ Consequence for the HTTP layer: the terminal outcome is established several asyn
 
 ## Workflows
 
-The lifecycle of both aggregates is captured in the sequence diagram below, with the following actors: `Client`, the two aggregates (`UserAccount`, `EmailAddress`), [`UserAccountHandling`](src/main/java/com/example/cqrs/domain/UserAccountHandling.java) (the class hosting the `@EventHandling("user")` methods that the framework's `EventHandlingProcessor` invokes), and `ESDB` on the far right as the durable event store. The boolean returned by `ReserveEmailAddressCommand` drives the branch directly inside the `@EventHandling` method.
+The lifecycle of both aggregates is captured in the sequence diagram below, with three actors: `Client`, [`UserAccountHandling`](src/main/java/com/example/cqrs/domain/UserAccountHandling.java) (the class hosting all command handlers, `@StateRebuilding` methods, and `@EventHandling("user")` orchestrators invoked by the framework's `EventHandlingProcessor`), and `ESDB` on the far right as the durable event store. The two aggregates `UserAccount` and `EmailAddress` are not drawn as their own swim lanes — every state change happens inside `UserAccountHandling`, so each transition is shown as a self-arrow on its lifeline annotated with the affected aggregate. The boolean returned by `ReserveEmailAddressCommand` drives the branch directly inside the `@EventHandling` method.
 
-Self-arrows on each aggregate lifeline depict the `@StateRebuilding` step — the aggregate is the lifeline, and every event causes a state change immediately at `publisher.publish(...)`, not only on the next command. The corresponding **`append <Event>` arrow to ESDB** makes the persistence boundary explicit, and the dashed return from ESDB to `UserAccountHandling` shows the asynchronous subscription that drives the cross-aggregate orchestration.
+Self-arrows on the `UserAccountHandling` lifeline depict the `@StateRebuilding` step — every event causes a state change immediately at `publisher.publish(...)`, not only on the next command, with the affected aggregate (`UserAccount` or `EmailAddress`) annotated on the arrow. The corresponding **`append <Event>` arrow to ESDB** makes the persistence boundary explicit, and the dashed return from ESDB to `UserAccountHandling` shows the asynchronous subscription that drives the cross-aggregate orchestration. The `202 Accepted` reply to the client is drawn as a **solid** arrow rather than the usual dashed return: it is a synchronous status code, but unlike a typical return value its outcome is not yet decided at that point — whether the sign-up or email change actually succeeds is only established after the async leg completes.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant Client
-    participant UA as UserAccount
     participant EHP as UserAccountHandling
-    participant EA as EmailAddress
     participant ESDB
 
     rect rgb(240,248,255)
     Note over Client,ESDB: Sign-Up workflow
-    Client->>+UA: SignUpCommand
-    UA->>UA: SignUpInitiatedEvent<br/>∅ → Registering(email)
-    UA->>ESDB: append SignUpInitiatedEvent
-    UA-->>-Client: 202 Accepted
+    Client->>EHP: SignUpCommand
+    EHP->>EHP: SignUpInitiatedEvent<br/>UserAccount: ∅ → Registering(email)
+    EHP->>ESDB: append SignUpInitiatedEvent
+    EHP->>Client: 202 Accepted
     ESDB-->>EHP: SignUpInitiatedEvent (subscribed)
-    EHP->>+EA: ReserveEmailAddressCommand(email, user)
+    EHP->>EHP: ReserveEmailAddressCommand(email, user)
     alt email Available (or null)
-        EA->>EA: EmailAddressReservedEvent<br/>∅/Available → Reserved(email, user)
-        EA->>ESDB: append EmailAddressReservedEvent
-        EA-->>-EHP: true
-        EHP->>+UA: CompleteSignUpCommand
-        UA->>UA: SignUpCompletedEvent<br/>Registering → Registered(email)
-        UA->>ESDB: append SignUpCompletedEvent
-        UA-->>-EHP: ✓
+        EHP->>EHP: EmailAddressReservedEvent<br/>EmailAddress: ∅/Available → Reserved(email, user)
+        EHP->>ESDB: append EmailAddressReservedEvent
+        EHP->>EHP: CompleteSignUpCommand
+        EHP->>EHP: SignUpCompletedEvent<br/>UserAccount: Registering → Registered(email)
+        EHP->>ESDB: append SignUpCompletedEvent
     else email already Reserved by another user
-        Note over EA,ESDB: stays Reserved — no event, nothing appended
-        EA-->>EHP: false
-        EHP->>+UA: RejectSignUpCommand
-        UA->>UA: SignUpRejectedEvent<br/>Registering → NotRegistered(email)
-        UA->>ESDB: append SignUpRejectedEvent
-        UA-->>-EHP: ✓
+        Note over EHP,ESDB: stays Reserved — no event, nothing appended
+        EHP->>EHP: RejectSignUpCommand
+        EHP->>EHP: SignUpRejectedEvent<br/>UserAccount: Registering → NotRegistered(email)
+        EHP->>ESDB: append SignUpRejectedEvent
     end
     end
 
     rect rgb(245,255,240)
     Note over Client,ESDB: Change-Email workflow (starts from Registered)
-    Client->>+UA: ChangeEmailCommand(newEmail)
-    UA->>UA: EmailChangeInitiatedEvent<br/>Registered(old) → ChangingEmail(old, new)
-    UA->>ESDB: append EmailChangeInitiatedEvent
-    UA-->>-Client: 202 Accepted
+    Client->>EHP: ChangeEmailCommand(newEmail)
+    EHP->>EHP: EmailChangeInitiatedEvent<br/>UserAccount: Registered(old) → ChangingEmail(old, new)
+    EHP->>ESDB: append EmailChangeInitiatedEvent
+    EHP->>Client: 202 Accepted
     ESDB-->>EHP: EmailChangeInitiatedEvent (subscribed)
-    EHP->>+EA: ReserveEmailAddressCommand(new, user)
+    EHP->>EHP: ReserveEmailAddressCommand(new, user)
     alt new email Available
-        EA->>EA: EmailAddressReservedEvent<br/>∅/Available → Reserved(new, user)
-        EA->>ESDB: append EmailAddressReservedEvent
-        EA-->>-EHP: true
-        EHP->>+UA: CompleteEmailChangeCommand
-        UA->>UA: EmailChangeCompletedEvent<br/>ChangingEmail → Registered(new)
-        UA->>ESDB: append EmailChangeCompletedEvent
-        UA-->>-EHP: ✓
-        EHP->>EA: ReleaseEmailAddressCommand(old, user)
-        EA->>EA: EmailAddressReleasedEvent<br/>Reserved(old) → Available(old)
-        EA->>ESDB: append EmailAddressReleasedEvent
+        EHP->>EHP: EmailAddressReservedEvent<br/>EmailAddress: ∅/Available → Reserved(new, user)
+        EHP->>ESDB: append EmailAddressReservedEvent
+        EHP->>EHP: CompleteEmailChangeCommand
+        EHP->>EHP: EmailChangeCompletedEvent<br/>UserAccount: ChangingEmail → Registered(new)
+        EHP->>ESDB: append EmailChangeCompletedEvent
+        EHP->>EHP: ReleaseEmailAddressCommand(old, user)
+        EHP->>EHP: EmailAddressReleasedEvent<br/>EmailAddress: Reserved(old) → Available(old)
+        EHP->>ESDB: append EmailAddressReleasedEvent
     else new email already Reserved
-        EA-->>EHP: false
-        EHP->>+UA: RevertEmailChangeCommand
-        UA->>UA: EmailChangeRevertedEvent<br/>ChangingEmail → Registered(old)
-        UA->>ESDB: append EmailChangeRevertedEvent
-        UA-->>-EHP: ✓
+        EHP->>EHP: RevertEmailChangeCommand
+        EHP->>EHP: EmailChangeRevertedEvent<br/>UserAccount: ChangingEmail → Registered(old)
+        EHP->>ESDB: append EmailChangeRevertedEvent
     end
     end
 ```
@@ -116,9 +106,9 @@ The numbers below refer to the autonumbered steps in the diagram above.
 
 **Synchronous part (steps 1–4).** The client `POST`s `SignUpCommand` (1). The duplicate-username guard sits *outside* the handler: [`SubjectCondition.PRISTINE`](src/main/java/com/example/cqrs/domain/api/command/SignUpCommand.java) on the command — the framework rejects the call before invoking the handler if the `/user-accounts/{username}` stream isn't empty. That's why a collision surfaces synchronously as an HTTP error and the handler stays trivial: it just publishes `SignUpInitiatedEvent`, which `@StateRebuilding` applies to take `UserAccount` from `∅` to `Registering(email)` (2). The event is appended to ESDB (3); [`UserController`](src/main/java/com/example/cqrs/http/UserController.java#L26-L30) returns `202 Accepted` (4) because the terminal outcome — completed or rejected — only materialises after the async leg.
 
-**Async orchestration (steps 5–13 happy path).** ESDB pushes the appended event to [`UserAccountHandling#on(SignUpInitiatedEvent, …)`](src/main/java/com/example/cqrs/domain/UserAccountHandling.java#L24-L31) via subscription (5). The orchestrator fires `ReserveEmailAddressCommand` against the index aggregate (6). The reservation handler ([`UserAccountHandling.java#L152-L167`](src/main/java/com/example/cqrs/domain/UserAccountHandling.java#L152-L167)) publishes `EmailAddressReservedEvent` only on the `null`/`Available` options; the `Reserved`-by-same-user option returns `true` without publishing (idempotent re-delivery), and the `Reserved`-by-someone-else option returns `false`. On `true` (9) the orchestrator dispatches `CompleteSignUpCommand` (10), which moves `UserAccount` to `Registered(email)` (11–13). Keeping orchestrator, reservation, and follow-up commands in the **same class** is the central design choice — the boolean stays a method-local variable, no Saga or global state survives between steps; the next command is decided right inside the event handler that observed the previous one.
+**Async orchestration (steps 5–11 happy path).** ESDB pushes the appended event to [`UserAccountHandling#on(SignUpInitiatedEvent, …)`](src/main/java/com/example/cqrs/domain/UserAccountHandling.java#L24-L31) via subscription (5). The orchestrator fires `ReserveEmailAddressCommand` against the index aggregate (6). The reservation handler ([`UserAccountHandling.java#L152-L167`](src/main/java/com/example/cqrs/domain/UserAccountHandling.java#L152-L167)) publishes `EmailAddressReservedEvent` only on the `null`/`Available` options (7–8); the `Reserved`-by-same-user option returns `true` without publishing (idempotent re-delivery), and the `Reserved`-by-someone-else option returns `false`. On `true` the orchestrator dispatches `CompleteSignUpCommand` (9), which moves `UserAccount` to `Registered(email)` (10–11). Keeping orchestrator, reservation, and follow-up commands in the **same class** is the central design choice — the boolean stays a method-local variable, no Saga or global state survives between steps; the next command is decided right inside the event handler that observed the previous one.
 
-**Denial branch (steps 14–18).** When the email is already reserved by another user, the handler returns `false` **without publishing anything** — that's why the diagram shows no `EA→EA` self-arrow and no `EA→ESDB` append in this branch. The orchestrator dispatches `RejectSignUpCommand` (15), and `UserAccount` settles in the explicit `NotRegistered(email)` terminal state (16–18) instead of an absence-of-state — that's what makes the rejected sign-up replayable and observable through `GET /api/user-accounts/{username}`.
+**Denial branch (steps 12–14).** When the email is already reserved by another user, the handler returns `false` **without publishing anything** — that's why the diagram shows no `EmailAddressReservedEvent` self-arrow and no append in this branch. The orchestrator dispatches `RejectSignUpCommand` (12), and `UserAccount` settles in the explicit `NotRegistered(email)` terminal state (13–14) instead of an absence-of-state — that's what makes the rejected sign-up replayable and observable through `GET /api/user-accounts/{username}`.
 
 **Idempotency invariant.** Every command handler in [`UserAccountHandling`](src/main/java/com/example/cqrs/domain/UserAccountHandling.java) is an exhaustive `switch` over `Status` (or `EmailAddress`), with a no-op option for every off-flow state. A re-fired `CompleteSignUpCommand` against an already-`Registered` account hits a no-op option and produces no event — and that is exactly what makes redelivery (under the framework's [retry policy](https://docs.opencqrs.com/reference/core_components/event_handling_processor/)) and full event replay safe.
 
@@ -126,9 +116,9 @@ The numbers below refer to the autonumbered steps in the diagram above.
 
 Starts from `Registered` — the terminal state of the successful sign-up branch. The pattern reuses the **same** `EmailAddress` index aggregate and the **same** orchestrator class.
 
-**Synchronous gate (steps 19–22).** Unlike sign-up, the change-email guard cannot be expressed via `SubjectCondition` — uniqueness against a *new* email is exactly what the index aggregate is for. Instead, the [`ChangeEmailCommand` handler](src/main/java/com/example/cqrs/domain/UserAccountHandling.java#L71-L82) enumerates every `Status` and throws a typed domain exception (`SameEmailException`, `EmailChangeInProgressException`, `SignUpPendingException`, `AccountDisabledException`) for any non-`Registered` option; [`ApiExceptionHandler`](src/main/java/com/example/cqrs/http/ApiExceptionHandler.java) maps each one to the appropriate HTTP status before ESDB ever sees the request. On the happy option, `UserAccount` transitions to `ChangingEmail(old, new)` (20) — and the design choice that pays off later is **carrying both addresses** in this status: it is what makes the revert branch and the old-address release possible without rereading prior events.
+**Synchronous gate (steps 15–18).** Unlike sign-up, the change-email guard cannot be expressed via `SubjectCondition` — uniqueness against a *new* email is exactly what the index aggregate is for. Instead, the [`ChangeEmailCommand` handler](src/main/java/com/example/cqrs/domain/UserAccountHandling.java#L71-L82) enumerates every `Status` and throws a typed domain exception (`SameEmailException`, `EmailChangeInProgressException`, `SignUpPendingException`, `AccountDisabledException`) for any non-`Registered` option; [`ApiExceptionHandler`](src/main/java/com/example/cqrs/http/ApiExceptionHandler.java) maps each one to the appropriate HTTP status before ESDB ever sees the request. On the happy option, `UserAccount` transitions to `ChangingEmail(old, new)` (16) — and the design choice that pays off later is **carrying both addresses** in this status: it is what makes the revert branch and the old-address release possible without rereading prior events.
 
-**Happy path (steps 23–34).** The async leg mirrors sign-up: ESDB delivers the event (23), the orchestrator reserves the **new** address (24–26) using the same reservation handler. On `true` (27), `CompleteEmailChangeCommand` (28) takes `UserAccount` to `Registered(new)` (29–31). A *separate* [`@EventHandling` on `EmailChangeCompletedEvent`](src/main/java/com/example/cqrs/domain/UserAccountHandling.java#L121-L124) then frees the **old** address with `ReleaseEmailAddressCommand` (32–34). The release handler ([`UserAccountHandling.java#L174-L184`](src/main/java/com/example/cqrs/domain/UserAccountHandling.java#L174-L184)) only publishes when the caller still owns the reservation:
+**Happy path (steps 19–28).** The async leg mirrors sign-up: ESDB delivers the event (19), the orchestrator reserves the **new** address (20–22) using the same reservation handler. On `true`, `CompleteEmailChangeCommand` (23) takes `UserAccount` to `Registered(new)` (24–25). A *separate* [`@EventHandling` on `EmailChangeCompletedEvent`](src/main/java/com/example/cqrs/domain/UserAccountHandling.java#L121-L124) then frees the **old** address with `ReleaseEmailAddressCommand` (26–28). The release handler ([`UserAccountHandling.java#L174-L184`](src/main/java/com/example/cqrs/domain/UserAccountHandling.java#L174-L184)) only publishes when the caller still owns the reservation:
 
 ```java
 case EmailAddress.Reserved r when r.username().equals(command.username()) ->
@@ -137,7 +127,7 @@ case EmailAddress.Reserved r when r.username().equals(command.username()) ->
 
 The two other options (`Available` and `Reserved`-by-someone-else) are silent no-ops — re-delivery is harmless.
 
-**Revert branch (steps 35–39).** On `false` (35) — the new email is held by another user — `RevertEmailChangeCommand` (36) takes `UserAccount` back to `Registered(old)` (37–39). The old address stays reserved by this user, so no compensating release is needed; the only ESDB write in this branch is the revert event itself (38).
+**Revert branch (steps 29–31).** On `false` — the new email is held by another user — `RevertEmailChangeCommand` (29) takes `UserAccount` back to `Registered(old)` (30–31). The old address stays reserved by this user, so no compensating release is needed; the only ESDB write in this branch is the revert event itself (31).
 
 ## Running the App
 
