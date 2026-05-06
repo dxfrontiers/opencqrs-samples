@@ -66,7 +66,7 @@ sequenceDiagram
     Note over B: now Version 1
     B-->>U1: 204 No Content
 
-    rect rgb(255,240,240)
+    rect rgb(252,248,248)
     U2->>B: save (based on Version 0)
     Note right of B: latest is already Version 1
     B--xU2: 412 Precondition Failed
